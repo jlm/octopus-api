@@ -88,7 +88,7 @@ begin
   $logger.debug("from: #{from.to_s}; to: #{to.to_s}; at: #{at.to_s}")
 
   octo = OctAPI.new(config['key'], $logger)
-  octo.postcode = opts[:postcode]
+  octo.postcode = opts[:postcode]     # This also sets the PES name
 
   #####
   #####     ELECTRICITY METER POINTS
@@ -115,8 +115,10 @@ begin
   end
 
   if opts[:product]
-    p = octo.product(opts[:product])
+    params = at ? { tariffs_active_at: at } : nil
+    p = octo.product(opts[:product], params)
     puts "Product #{opts[:product]} tariffs active at #{p.tariffs_active_at}"
+    puts "Matching tariffs:"
   end
 
   #####

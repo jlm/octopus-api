@@ -87,8 +87,8 @@ class OctAPI
   # of it to hold the data.  My worry is that this creates too much overhead, including a new RestClient instance for
   # each product query.
   ######
-  def product(code)
-    OctAPI::Product.new(@key, code)
+  def product(code, params = nil)
+    OctAPI::Product.new(@key, code, params)
   end
 end
 
@@ -96,10 +96,10 @@ class OctAPI::Product < OctAPI
   attr_reader :tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
               :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand
 
-  def initialize(key, code)
+  def initialize(key, code, params = nil)
     super(key)
     @code = code
-    prod = octofetch("products/#{code}/")
+    prod = octofetch("products/#{code}/", params)
     @tariffs_active_at = Time.parse(prod['tariffs_active_at']).getlocal(0)
     @full_name = prod['full_name']
     @display_name = prod['display_name']
