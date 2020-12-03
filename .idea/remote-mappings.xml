@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteMappingsManager">
+    <list>
+      <list>
+        <remote-mappings server-id="ruby@wsl://UBUNTU2004/home/jlm/.rbenv/versions/2.7.1/bin/ruby">
+          <settings>
+            <list>
+              <mapping local-root="$PROJECT_DIR$" remote-root="/v/devel/RubymineProjects/octoload" />
+            </list>
+          </settings>
+        </remote-mappings>
+      </list>
+    </list>
+  </component>
+</project>
