@@ -15,7 +15,7 @@
     </EXTENSION>
     <EXTENSION ID="org.jetbrains.plugins.ruby.rails.run.RailsRunConfigurationExtension" SCRATCH_USE_RAILS_RUNNER="false" />
     <RUBY_RUN_CONFIG NAME="SCRIPT_PATH" VALUE="$MODULE_DIR$/octoload.rb" />
-    <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="-d --product FIX-12M-20-01-10 --postcode YO612NS --at 2020-02-08 --to 2020-11-08 --csv fred.csv -m &quot;Octopus 12M Fixed&quot;" />
+    <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="--products FIX-12M-20-01-10 --postcode YO612NS --at 2020-02-08 --to 2020-11-08 --csv fred.csv -m &quot;Octopus 12M Fixed&quot;" />
     <method v="2" />
   </configuration>
 </component>

@@ -38,6 +38,17 @@ class Time
   end
 end
 
+def print_product(code, product)
+  puts "Product #{code} tariffs active at #{product.tariffs_active_at}"
+  puts "Matching tariffs:"
+  product.sr_elec_tariffs[product.region].each do |ts|
+    puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
+  end
+end
+
+###
+###   MAIN PROGRAM
+###
 begin
   opts = Slop.parse do |o|
     o.string '-s', '--secrets', 'secrets YAML file name', default: 'secrets.yml'
@@ -54,6 +65,7 @@ begin
     o.bool   '--products', 'retrieve product information from the Octopus API'
     o.string '-m', '--match', 'select products matching the given string in their display name'
     o.string '--product', 'retrieve details of a single product'
+    o.bool '--export', 'include Export products'
     o.on '--help' do
       STDERR.puts o
       exit
@@ -67,7 +79,7 @@ begin
   $logger.level = Logger::INFO
   $logger.level = Logger::DEBUG if $DEBUG
   #
-  # Log in to the 802.1 Maintenance Database
+  # Set up debugging through Charles Proxy
   #
   if $DEBUG
     RestClient.proxy = "http://localhost:8888"
@@ -107,9 +119,11 @@ begin
     params = at ? { available_at: at } : nil
     products = octo.products(params)
     products.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
+    products.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
     products.each do |product|
-      puts "#{product['code']}: #{product['display_name']}"
-
+      params2 = at ? { tariffs_active_at: at } : nil
+      prod_details = octo.product(product['code'], params2)
+      print_product(product['code'], prod_details)
     end
     twit = 36
   end
@@ -117,11 +131,7 @@ begin
   if opts[:product]
     params = at ? { tariffs_active_at: at } : nil
     p = octo.product(opts[:product], params)
-    puts "Product #{opts[:product]} tariffs active at #{p.tariffs_active_at}"
-    puts "Matching tariffs:"
-    p.sr_elec_tariffs[p.region].each do |ts|
-      puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
-    end
+    print_product(opts[:product], p)
   end
 
   #####
