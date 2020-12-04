@@ -119,6 +119,9 @@ begin
     p = octo.product(opts[:product], params)
     puts "Product #{opts[:product]} tariffs active at #{p.tariffs_active_at}"
     puts "Matching tariffs:"
+    p.sr_elec_tariffs[p.region].each do |ts|
+      puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
+    end
   end
 
   #####

@@ -82,21 +82,21 @@ class OctAPI
   end
 
   Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
-                       :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description, keyword_init: true)
+                       :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
+                       :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, keyword_init: true)
+  TariffSummary = Struct.new(:tariff_code, :payment_model, :sur_excvat, :sur_incvat, :sc_excvat, :sc_incvat,
+                             keyword_init: true)
+
   ######
-  # Retrieve details of a product.  I wanted this method to return an object containing the details, but I don't
-  # know how to do this properly.  Currently, it's implemented by deriving a class from OctAPI and creating an instance
-  # of it to hold the data.  My worry is that this creates too much overhead, including a new RestClient instance for
-  # each product query.
+  # Retrieve details of a product.
   ######
   def product(code, params = nil)
     prod = octofetch("products/#{code}/", params)
-    Product.new(
+    result = Product.new(
       tariffs_active_at: Time.parse(prod['tariffs_active_at']).getlocal(0),
       full_name: prod['full_name'],
       display_name: prod['display_name'],
       description: prod['description'],
-      is_variable: prod['is_variable'],
       is_green: prod['is_green'],
       is_tracker: prod['is_tracker'],
       is_prepay: prod['is_prepay'],
@@ -108,5 +108,25 @@ class OctAPI
       brand: prod['brand'],
       is_variable: prod['is_variable']
     )
+    if @pes_name
+      result.region = @pes_name
+    end
+    result.sr_elec_tariffs = {}
+    prod['single_register_electricity_tariffs'].each do |region, pmg|
+      tariff_list = []
+      pmg.each do |payment_model, tariff_summary|
+        ts = TariffSummary.new(
+          tariff_code: tariff_summary['code'],
+          payment_model: payment_model,
+          sur_excvat: tariff_summary['standard_unit_rate_exc_vat'],
+          sur_incvat: tariff_summary['standard_unit_rate_inc_vat'],
+          sc_excvat: tariff_summary['standing_charge_exc_vat'],
+          sc_incvat: tariff_summary['standing_charge_inc_vat']
+        )
+        tariff_list << ts
+      end
+      result.sr_elec_tariffs[region] = tariff_list
+    end
+    result
   end
 end
