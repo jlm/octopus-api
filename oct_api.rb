@@ -41,7 +41,7 @@ class OctAPI
   def postcode=(postcode)
     @postcode = postcode
     gsps = postcode && gsps(postcode)
-    if gsps['count'] == 1
+    if gsps && (gsps['count'] == 1)
       @pes_name = gsps['results'].first['group_id']
       @logger.info("postcode <#{postcode}>: grid supply point PES name: #{@pes_name}") if @logger
     else

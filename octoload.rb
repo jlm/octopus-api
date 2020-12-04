@@ -41,8 +41,16 @@ end
 def print_product(code, product)
   puts "Product #{code} tariffs active at #{product.tariffs_active_at}"
   puts "Matching tariffs:"
-  product.sr_elec_tariffs[product.region].each do |ts|
-    puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
+  if product.region
+    product.sr_elec_tariffs[product.region].each do |ts|
+      puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
+    end
+  else
+    product.sr_elec_tariffs.each do |region, tslist|
+      tslist.each do |ts|
+        puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
+      end
+    end
   end
 end
 
