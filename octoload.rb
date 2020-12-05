@@ -54,6 +54,10 @@ def print_product(code, product)
   end
 end
 
+def print_tariff_charge(rate)
+  puts "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate['value_inc_vat']} p/kWh"
+end
+
 ###
 ###   MAIN PROGRAM
 ###
@@ -140,14 +144,11 @@ begin
         t_params = {}
         t_params[:period_from] = from if from
         t_params[:period_to] = to if to
+        # XXX: region might be unknown
         prod_details.sr_elec_tariffs[prod_details.region].each do |ts|
-          # XXX: region might be unknown
           scs, surs = octo.tariff_charges(product['code'], ts.tariff_code, t_params)
-          twit = 27
           raise 'Cannot handle changing standing charges' unless scs.length == 1
-          surs.each do |sur|
-            puts "    #{sur['valid_from'].to_s} to #{sur['valid_to'].to_s}: #{sur['value_inc_vat']} p/kWh"
-          end
+          surs.each(&method(:print_tariff_charge))
         end
       end
 
