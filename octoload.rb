@@ -133,6 +133,24 @@ begin
       pd_params[:tariffs_active_at] = at if at
       prod_details = octo.product(product['code'], pd_params)
       print_product(product['code'], prod_details)
+      if prod_details.region.nil?
+        $logger.warn('specify a postcode to allow retrieval of tariff charges')
+      else
+        # TODO: how should I structure drill-down vs. printing?  Perhaps drill-down is basic and printing an optional side-effect.
+        t_params = {}
+        t_params[:period_from] = from if from
+        t_params[:period_to] = to if to
+        prod_details.sr_elec_tariffs[prod_details.region].each do |ts|
+          # XXX: region might be unknown
+          scs, surs = octo.tariff_charges(product['code'], ts.tariff_code, t_params)
+          twit = 27
+          raise 'Cannot handle changing standing charges' unless scs.length == 1
+          surs.each do |sur|
+            puts "    #{sur['valid_from'].to_s} to #{sur['valid_to'].to_s}: #{sur['value_inc_vat']} p/kWh"
+          end
+        end
+      end
+
     end
     twit = 36
   end
