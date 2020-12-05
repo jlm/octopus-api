@@ -38,18 +38,18 @@ class Time
   end
 end
 
+def print_tariff_summary(ts)
+  puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Current unit price: #{ts.sur_incvat} p/kWh"
+end
+
 def print_product(code, product)
   puts "Product #{code} tariffs active at #{product.tariffs_active_at}"
   puts "Matching tariffs:"
   if product.region
-    product.sr_elec_tariffs[product.region].each do |ts|
-      puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
-    end
+    product.sr_elec_tariffs[product.region].each(&method(:print_tariff_summary))
   else
-    product.sr_elec_tariffs.each do |region, tslist|
-      tslist.each do |ts|
-        puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Unit price: #{ts.sur_incvat} p/kWh"
-      end
+    product.sr_elec_tariffs.each do |_region, tslist|
+      tslist.each(&method(:print_tariff_summary))
     end
   end
 end
@@ -129,8 +129,9 @@ begin
     products.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
     products.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
     products.each do |product|
-      params2 = at ? { tariffs_active_at: at } : nil
-      prod_details = octo.product(product['code'], params2)
+      pd_params = {}
+      pd_params[:tariffs_active_at] = at if at
+      prod_details = octo.product(product['code'], pd_params)
       print_product(product['code'], prod_details)
     end
     twit = 36
