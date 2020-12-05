@@ -35,6 +35,17 @@ class OctAPI
     JSON.parse(resp)
   end
 
+  def octofetch_array(spec, params = {})
+    result = []
+    myparams = params.dup
+    begin
+      response = octofetch(spec, myparams)
+      result += response['results']
+      myparams[:page] = response['next'] && response['next'].split('page=')[1]
+    end while myparams[:page]
+    result
+  end
+
   ######
   # Set the postcode, and derive the grid supply point list from it.
   ######
@@ -66,19 +77,13 @@ class OctAPI
   end
 
   def products(params = {})
-    result = []
-    begin
-      response = octofetch("products/", params)
-      result += response['results']
-      params[:page] = response['next'] && response['next'].split('page=')[1]
-    end while params[:page]
-    result
+    octofetch_array("products/", params)
   end
 
   def tariff_charges(prodcode, tariffcode, params={})
-    sc =  octofetch("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
-    sur = octofetch("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standard-unit-rates/", params)
-    { sc: sc, sur: sur}
+    sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
+    sur = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standard-unit-rates/", params)
+    return sc, sur
   end
 
   Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
