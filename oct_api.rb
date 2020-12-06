@@ -88,8 +88,9 @@ class OctAPI
 
   Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
                        :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
-                       :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, keyword_init: true)
-  TariffSummary = Struct.new(:tariff_code, :payment_model, :sur_excvat, :sur_incvat, :sc_excvat, :sc_incvat,
+                       :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true)
+  TariffSummary = Struct.new(:tariff_code, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
+                             :dur_day_excvat, :dur_day_incvat, :dur_night_excvat, :dur_night_incvat,
                              keyword_init: true)
 
   ######
@@ -117,7 +118,7 @@ class OctAPI
       result.region = @pes_name
     end
     result.sr_elec_tariffs = {}
-    prod['single_register_electricity_tariffs'].each do |region, pmg|
+    prod['single_register_electricity_tariffs']&.each do |region, pmg|
       tariff_list = []
       pmg.each do |payment_model, tariff_summary|
         ts = TariffSummary.new(
