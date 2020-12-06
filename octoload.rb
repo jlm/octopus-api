@@ -39,14 +39,16 @@ class Time
 end
 
 def print_tariff_summary(ts)
-  puts "  #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Current unit price: #{ts.sur_incvat} p/kWh"
+  puts "  + #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Current unit price: #{ts.sur_incvat} p/kWh"
 end
 
 def print_product(code, product)
-  puts "Product #{code} tariffs active at #{product.tariffs_active_at}"
-  puts "Matching tariffs:"
+  puts "Product #{code} #{product.display_name} tariffs active at #{product.tariffs_active_at}"
+  #puts "Matching tariffs:"
   if product.region
-    product.sr_elec_tariffs[product.region].each(&method(:print_tariff_summary))
+    unless product.sr_elec_tariffs.empty?
+      product.sr_elec_tariffs[product.region].each(&method(:print_tariff_summary))
+    end
   else
     product.sr_elec_tariffs.each do |_region, tslist|
       tslist.each(&method(:print_tariff_summary))
@@ -145,13 +147,15 @@ begin
         t_params[:period_from] = from if from
         t_params[:period_to] = to if to
         # XXX: region might be unknown
-        prod_details.sr_elec_tariffs[prod_details.region].each do |ts|
-          scs, surs = octo.tariff_charges(product['code'], ts.tariff_code, t_params)
-          raise 'Cannot handle changing standing charges' unless scs.length == 1
-          surs.each(&method(:print_tariff_charge))
+        unless prod_details.sr_elec_tariffs.empty?
+          prod_details.sr_elec_tariffs[prod_details.region].each do |ts|
+            scs, surs = octo.tariff_charges(product['code'], ts.tariff_code, t_params)
+            raise 'Cannot handle changing standing charges' unless scs.length == 1
+            surs.reverse!
+            surs.each(&method(:print_tariff_charge))
+          end
         end
       end
-
     end
     twit = 36
   end
