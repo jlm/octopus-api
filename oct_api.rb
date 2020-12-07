@@ -80,18 +80,57 @@ class OctAPI
     octofetch_array("products/", params)
   end
 
-  def tariff_charges(prodcode, tariffcode, params={})
-    sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
-    sur = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standard-unit-rates/", params)
-    return sc, sur
+  TARIFF_TYPES = {sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
+  ######
+  # A class method to give the tariff type name of a tariff class
+  def self.tariff_type_name(tariff_type)
+    TARIFF_TYPES[tariff_type]
+  end
+
+  def tariff_charges(prodcode, tariffcode, tarifftype, params={})
+    case tarifftype
+    when :sr_elec
+      sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
+      rates = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standard-unit-rates/", params)
+    when :dr_elec
+      sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
+      rates = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/day-unit-rates/", params)
+      rates += octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/night-unit-rates/", params)
+    when :sr_gas
+      sc =  octofetch_array("products/#{prodcode}/gas-tariffs/#{tariffcode}/standing-charges/", params)
+      rates = octofetch_array("products/#{prodcode}/gas-tariffs/#{tariffcode}/standard-unit-rates/", params)
+    end
+    return sc, rates
   end
 
   Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
                        :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
                        :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true)
-  TariffSummary = Struct.new(:tariff_code, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
-                             :dur_day_excvat, :dur_day_incvat, :dur_night_excvat, :dur_night_incvat,
+  TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
+                             :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat,
                              keyword_init: true)
+
+  def make_array_of_tariffs(pmg, tariff_type)
+    # tariff_type is :sr_elec, :dr_elec or :sr_gas
+    tariff_list = []
+    pmg.each do |payment_model, tariff_summary|
+      ts = TariffSummary.new(
+        tariff_code: tariff_summary['code'],
+        tariff_type: tariff_type,
+        payment_model: payment_model,
+        sc_excvat: tariff_summary['standing_charge_exc_vat'],
+        sc_incvat: tariff_summary['standing_charge_inc_vat'],
+        sur_excvat: tariff_summary['standard_unit_rate_exc_vat'],
+        sur_incvat: tariff_summary['standard_unit_rate_inc_vat'],
+        dur_excvat: tariff_summary['day_unit_rate_exc_vat'],
+        dur_incvat: tariff_summary['day_unit_rate_inc_vat'],
+        nur_excvat: tariff_summary['night_unit_rate_exc_vat'],
+        nur_incvat: tariff_summary['night_unit_rate_inc_vat']
+      )
+      tariff_list << ts
+    end
+    tariff_list
+  end
 
   ######
   # Retrieve details of a product.
@@ -117,21 +156,17 @@ class OctAPI
     if @pes_name
       result.region = @pes_name
     end
-    result.sr_elec_tariffs = {}
-    prod['single_register_electricity_tariffs']&.each do |region, pmg|
-      tariff_list = []
-      pmg.each do |payment_model, tariff_summary|
-        ts = TariffSummary.new(
-          tariff_code: tariff_summary['code'],
-          payment_model: payment_model,
-          sur_excvat: tariff_summary['standard_unit_rate_exc_vat'],
-          sur_incvat: tariff_summary['standard_unit_rate_inc_vat'],
-          sc_excvat: tariff_summary['standing_charge_exc_vat'],
-          sc_incvat: tariff_summary['standing_charge_inc_vat']
-        )
-        tariff_list << ts
-      end
-      result.sr_elec_tariffs[region] = tariff_list
+    result.tariffs = prod['single_register_electricity_tariffs']&.each_with_object({}) do |(region,pmg), memohash|
+      memohash[region] ||= []
+      memohash[region] += make_array_of_tariffs(pmg, :sr_elec)
+    end
+    result.tariffs = prod['dual_register_electricity_tariffs']&.each_with_object(result.tariffs) do |(region,pmg), memohash|
+      memohash[region] ||= []
+      memohash[region] += make_array_of_tariffs(pmg, :dr_elec)
+    end
+    result.tariffs = prod['single_register_gas_tariffs']&.each_with_object(result.tariffs) do |(region,pmg), memohash|
+      memohash[region] ||= []
+      memohash[region] += make_array_of_tariffs(pmg, :sr_gas)
     end
     result
   end

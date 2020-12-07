@@ -39,18 +39,27 @@ class Time
 end
 
 def print_tariff_summary(ts)
-  puts "  + #{ts.tariff_code}: #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, Current unit price: #{ts.sur_incvat} p/kWh"
+  tt = OctAPI.tariff_type_name(ts.tariff_type)
+  case ts.tariff_type
+  when :sr_elec, :sr_gas
+      price = "Standard unit rate: #{ts.sur_incvat} p/kWh"
+  when :dr_elec
+    price = "Day unit rate: #{ts.dur_incvat} p/kWh, Night unit rate: #{ts.nur_incvat} p/kWh"
+  end
+  puts "  + #{ts.tariff_code}: #{tt} #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, #{price}"
 end
 
 def print_product(code, product)
-  puts "Product #{code} #{product.display_name} tariffs active at #{product.tariffs_active_at}"
+  puts "Product #{code} \"#{product.display_name}\" tariffs active at #{product.tariffs_active_at}"
   #puts "Matching tariffs:"
+  if product.tariffs.empty?
+    puts "  + No applicable tariffs"
+    return
+  end
   if product.region
-    unless product.sr_elec_tariffs.empty?
-      product.sr_elec_tariffs[product.region].each(&method(:print_tariff_summary))
-    end
+    product.tariffs[product.region].each(&method(:print_tariff_summary))
   else
-    product.sr_elec_tariffs.each do |_region, tslist|
+    product.tariffs.each do |_region, tslist|
       tslist.each(&method(:print_tariff_summary))
     end
   end
@@ -147,12 +156,11 @@ begin
         t_params = {}
         t_params[:period_from] = from if from
         t_params[:period_to] = to if to
-        unless prod_details.sr_elec_tariffs.empty?
-          prod_details.sr_elec_tariffs[prod_details.region].each do |ts|
-            scs, surs = octo.tariff_charges(product['code'], ts.tariff_code, t_params)
+        unless prod_details.tariffs.empty?
+          prod_details.tariffs[prod_details.region].each do |ts|
+            scs, *rates = octo.tariff_charges(product['code'], ts.tariff_code, ts.tariff_type, t_params)
             raise 'Cannot handle changing standing charges' unless scs.length == 1
-            surs.reverse!
-            surs.each(&method(:print_tariff_charge))
+            rates.each { |rate| rate.reverse!; rate.each(&method(:print_tariff_charge)) }
           end
         end
       end
