@@ -45,6 +45,8 @@ def print_tariff_summary(ts)
       price = "Standard unit rate: #{ts.sur_incvat} p/kWh"
   when :dr_elec
     price = "Day unit rate: #{ts.dur_incvat} p/kWh, Night unit rate: #{ts.nur_incvat} p/kWh"
+  else
+    raise ArgumentError, 'unknown tariff type'
   end
   puts "  + #{ts.tariff_code}: #{tt} #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, #{price}"
 end
@@ -94,27 +96,32 @@ begin
       exit
     end
   end
+  #noinspection RubyResolve
   config = YAML.load(File.read(opts[:secrets]))
 
   # Set up logging
-  $DEBUG = opts.debug?
+  $_debug = opts.debug?
   $logger = Logger.new(STDERR)
   $logger.level = Logger::INFO
-  $logger.level = Logger::DEBUG if $DEBUG
+  $logger.level = Logger::DEBUG if $_debug
   #
   # Set up debugging through Charles Proxy
   #
-  if $DEBUG
+  rest_client_options = {}
+  if $_debug
     RestClient.proxy = "http://localhost:8888"
     $logger.debug("Using HTTP proxy #{RestClient.proxy}")
+    rest_client_options = { verify_ssl: OpenSSL::SSL::VERIFY_NONE }
   end
 
   #
   # If we are posting to Slack, open the Slack webhook
   #
+=begin
   if opts[:slackpost]
     slack = RestClient::Resource.new(config['slack_webhook'])
   end
+=end
 
   from = opts[:from] ? Time.parse(opts[:from]).iso8601 : nil
   to = opts[:to] ? Time.parse(opts[:to]).iso8601 : nil
@@ -122,7 +129,7 @@ begin
 
   $logger.debug("from: #{from.to_s}; to: #{to.to_s}; at: #{at.to_s}")
 
-  octo = OctAPI.new(config['key'], $logger)
+  octo = OctAPI.new(config['key'], $logger, rest_client_options)
   octo.postcode = opts[:postcode]     # This also sets the PES name
 
   #####
@@ -165,7 +172,6 @@ begin
         end
       end
     end
-    twit = 36
   end
 
   if opts[:product]
@@ -185,7 +191,6 @@ begin
     end
 
     cons = octo.consumption(config['mpan'], config['serial'], 25000, from, to)
-    twit = 35
     results = cons['results']
     ######
     # Output the consumption data to a CSV file, if selected
