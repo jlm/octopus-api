@@ -49,6 +49,10 @@ def print_tariff_summary(ts)
     raise ArgumentError, 'unknown tariff type'
   end
   puts "  + #{ts.tariff_code}: #{tt} #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, #{price}"
+  ts.sc&.reverse_each  { |rate| print_tariff_charge(rate, 'Standard charge', 'p/day') }
+  ts.sur&.reverse_each { |rate| print_tariff_charge(rate, 'Standard unit rate') }
+  ts.dur&.reverse_each { |rate| print_tariff_charge(rate, 'Day unit rate') }
+  ts.nur&.reverse_each { |rate| print_tariff_charge(rate, 'Night unit rate') }
 end
 
 def print_product(code, product)
@@ -67,8 +71,8 @@ def print_product(code, product)
   end
 end
 
-def print_tariff_charge(rate)
-  puts "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate['value_inc_vat']} p/kWh"
+def print_tariff_charge(rate, rate_name = '', rate_unit = 'p/kWh')
+  puts "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}"
 end
 
 ###
@@ -154,8 +158,8 @@ begin
       pd_params = {}
       pd_params[:tariffs_active_at] = at if at
 
+      # @type [Struct Product] prod_details
       prod_details = octo.product(product['code'], pd_params)
-      print_product(product['code'], prod_details)
       if prod_details.region.nil?
         $logger.warn('specify a postcode to allow retrieval of tariff charges')
       else
@@ -165,12 +169,24 @@ begin
         t_params[:period_to] = to if to
         unless prod_details.tariffs.empty?
           prod_details.tariffs[prod_details.region].each do |ts|
-            scs, *rates = octo.tariff_charges(product['code'], ts.tariff_code, ts.tariff_type, t_params)
+            scs, rates, night_rates = octo.tariff_charges(product['code'], ts.tariff_code, ts.tariff_type, t_params)
             raise 'Cannot handle changing standing charges' unless scs.length == 1
-            rates.each { |rate| rate.reverse!; rate.each(&method(:print_tariff_charge)) }
+            ts.sc = scs
+            case ts.tariff_type
+            when :sr_elec
+              ts.sur = rates
+            when :dr_elec
+              ts.dur = rates
+              ts.nur = night_rates
+            when :sr_gas
+              ts.sur = rates
+            else
+              raise 'Oopsie'
+            end
           end
         end
       end
+      print_product(product['code'], prod_details)
     end
   end
 
