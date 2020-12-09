@@ -16,7 +16,7 @@ class OctAPI
 
   # @param [String] key Octopus API key
   # @param [Logger] logger A previously-created Logger object
-  # @param [Hash] options Use this to pass `verify_ssl: OpenSSL::SSL::VERIFY_NONE`
+  # @param [Hash] options Use this to pass +verify_ssl: OpenSSL::SSL::VERIFY_NONE+
   # @return [OctAPI] A newly-created OctAPI instance
   def initialize(key, logger = nil, options = {})
     @key = key
@@ -69,6 +69,7 @@ class OctAPI
   end
 
   def tariff_charges(prodcode, tariffcode, tarifftype, params={})
+    night_rates = nil
     case tarifftype
     when :sr_elec
       sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
@@ -76,27 +77,28 @@ class OctAPI
     when :dr_elec
       sc =  octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/standing-charges/", params)
       rates = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/day-unit-rates/", params)
-      rates += octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/night-unit-rates/", params)
+      night_rates = octofetch_array("products/#{prodcode}/electricity-tariffs/#{tariffcode}/night-unit-rates/", params)
     when :sr_gas
       sc =  octofetch_array("products/#{prodcode}/gas-tariffs/#{tariffcode}/standing-charges/", params)
       rates = octofetch_array("products/#{prodcode}/gas-tariffs/#{tariffcode}/standard-unit-rates/", params)
     else
       raise ArgumentError, 'tarriftype must be :sr_elec, :dr_elec or :sr_gas'
     end
-    [sc, rates]
+    [sc, rates, night_rates]
   end
 
   Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
                        :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
                        :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true)
   TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
-                             :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat,
+                             :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat, :sc, :sur, :dur, :nur,
                              keyword_init: true)
 
-  ######
   # Retrieve details of a product.
-  ######
-  def product(code, params = nil)
+  # @param [String] code the Octopus product code
+  # @param [Hash, nil] params parameters for the API call
+  # @return [Product] A new Product structure containing the retrieved product details
+  def product(code, params = {})
     prod = octofetch("products/#{code}/", params)
     result = Product.new(
       tariffs_active_at: Time.parse(prod['tariffs_active_at']).getlocal(0),
