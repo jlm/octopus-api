@@ -61,11 +61,14 @@ class OctAPI
     octofetch_array("products/", params)
   end
 
-  TARIFF_TYPES = {sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
+  TARIFF_TYPES = [ :sr_elec, :dr_elec, :sr_gas ]
+  TARIFF_TYPE_NAMES = { sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
   ######
   # A class method to give the tariff type name of a tariff class
+  # @param [TARIFF_TYPES] tariff_type
+  # @return [String] the name of the tariff type
   def self.tariff_type_name(tariff_type)
-    TARIFF_TYPES[tariff_type]
+    TARIFF_TYPE_NAMES[tariff_type]
   end
 
   def tariff_charges(prodcode, tariffcode, tarifftype, params={})
@@ -87,20 +90,24 @@ class OctAPI
     [sc, rates, night_rates]
   end
 
-  Product = Struct.new(:tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
+  Product = Struct.new(:product_code, :tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
                        :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
                        :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true)
   TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
                              :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat, :sc, :sur, :dur, :nur,
                              keyword_init: true)
 
-  # Retrieve details of a product.
+  # Retrieve details of a product. If a period is specified with :period_from, then attach tariff histories for each tariff.
   # @param [String] code the Octopus product code
   # @param [Hash, nil] params parameters for the API call
+  # @option params [Time] :available_at select products available at the time specified. nil means now.
+  # @option params [Time] :period_from include tariff rate information from the time specified
+  # @option params [Time] :period_to include tariff rate information up to the time specified (must also specify :period_from)
   # @return [Product] A new Product structure containing the retrieved product details
   def product(code, params = {})
     prod = octofetch("products/#{code}/", params)
-    result = Product.new(
+    product = Product.new(
+      product_code: code,
       tariffs_active_at: Time.parse(prod['tariffs_active_at']).getlocal(0),
       full_name: prod['full_name'],
       display_name: prod['display_name'],
@@ -116,22 +123,50 @@ class OctAPI
       brand: prod['brand'],
       is_variable: prod['is_variable']
     )
+    # The PES name specified via the postcode (if any) is stored in the Product.  This is used
+    # as a flag to allow retrieval of tariff charge history, because retrieving it for all
+    # regions might be a lot of data.
     if @pes_name
-      result.region = @pes_name
+      product.region = @pes_name
     end
-    result.tariffs = prod['single_register_electricity_tariffs']&.each_with_object({}) do |(region,pmg), memohash|
+    # For each tariff type, for each region (designated by a PES name typically _A to _P derived from a postcode), extract
+    # the list of tariff summaries returned in the "product" API call, and combine them into a hash indexed by region.
+    # The tariff summaries are tagged with their tariff type, instead of being structured by it.
+    product.tariffs = prod['single_register_electricity_tariffs']&.each_with_object({}) do |(region,pmg), memohash|
       memohash[region] ||= []
       memohash[region] += make_array_of_tariffs(pmg, :sr_elec)
     end
-    result.tariffs = prod['dual_register_electricity_tariffs']&.each_with_object(result.tariffs) do |(region,pmg), memohash|
+    product.tariffs = prod['dual_register_electricity_tariffs']&.each_with_object(product.tariffs) do |(region,pmg), memohash|
       memohash[region] ||= []
       memohash[region] += make_array_of_tariffs(pmg, :dr_elec)
     end
-    result.tariffs = prod['single_register_gas_tariffs']&.each_with_object(result.tariffs) do |(region,pmg), memohash|
+    product.tariffs = prod['single_register_gas_tariffs']&.each_with_object(product.tariffs) do |(region,pmg), memohash|
       memohash[region] ||= []
       memohash[region] += make_array_of_tariffs(pmg, :sr_gas)
     end
-    result
+    # If a period was specified using :period_from, and a region has been selected,
+    # then retrieve and include a tariff charge "history" (which could extend into the future too).
+    tc_opts = {}
+    tc_opts[:period_from] = params[:period_from]
+    tc_opts[:period_to] = params[:period_to]
+    if params[:period_from] && product.region && !product.tariffs.empty?
+      product.tariffs[product.region].each do |ts|
+        scs, rates, night_rates = tariff_charges(product.product_code, ts.tariff_code, ts.tariff_type, tc_opts)
+        ts.sc = scs
+        case ts.tariff_type
+        when :sr_elec
+          ts.sur = rates
+        when :dr_elec
+          ts.dur = rates
+          ts.nur = night_rates
+        when :sr_gas
+          ts.sur = rates
+        else
+          raise ArgumentError, "unknown tariff_type #{ts.tariff_type.to_s} for tariff #{ts.tariff_code}"
+        end
+      end
+    end
+    product
   end
 
   private
@@ -161,9 +196,9 @@ class OctAPI
   # Translate a payment method group returned from the Octopus API into an array of TariffSummary objects.
   # The payment method and tariff type are squashed into the TariffSummary objects.
   #
-  # @param [Hash<String, Hash>] pmg A hash whose keys are payment method names (e.g., 'direct_debit_monthly')
+  # @param [Hash{String=>Hash}>] pmg A hash whose keys are payment method names (e.g., 'direct_debit_monthly')
   #     and whose values are hashes representing tariff summaries.
-  # @param [:sr_elec,:dr_elec,:sr_gas] tariff_type The tariff type.  (see TARIFF_TYPES)
+  # @param [:sr_elec,:dr_elec,:sr_gas] tariff_type The tariff type.  (see TARIFF_TYPE_NAMES)
   # @return [Array<TariffSummary>] An array of struct TariffSummary objects
   def make_array_of_tariffs(pmg, tariff_type)
     tariff_list = []

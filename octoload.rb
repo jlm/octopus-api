@@ -157,34 +157,13 @@ begin
     products.each do |product|
       pd_params = {}
       pd_params[:tariffs_active_at] = at if at
+      pd_params[:period_from] = from if from
+      pd_params[:period_to] = to if to
 
-      # @type [Struct Product] prod_details
+      # @type [Product] prod_details
       prod_details = octo.product(product['code'], pd_params)
       if prod_details.region.nil?
         $logger.warn('specify a postcode to allow retrieval of tariff charges')
-      else
-        # Retrieve tariff charges for the selected period
-        t_params = {}
-        t_params[:period_from] = from if from
-        t_params[:period_to] = to if to
-        unless prod_details.tariffs.empty?
-          prod_details.tariffs[prod_details.region].each do |ts|
-            scs, rates, night_rates = octo.tariff_charges(product['code'], ts.tariff_code, ts.tariff_type, t_params)
-            raise 'Cannot handle changing standing charges' unless scs.length == 1
-            ts.sc = scs
-            case ts.tariff_type
-            when :sr_elec
-              ts.sur = rates
-            when :dr_elec
-              ts.dur = rates
-              ts.nur = night_rates
-            when :sr_gas
-              ts.sur = rates
-            else
-              raise 'Oopsie'
-            end
-          end
-        end
       end
       print_product(product['code'], prod_details)
     end
