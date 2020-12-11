@@ -148,7 +148,7 @@ class OctAPI
     tc_opts = {}
     tc_opts[:period_from] = params[:period_from]
     tc_opts[:period_to] = params[:period_to]
-    if params[:period_from] && product.region && !product.tariffs.empty?
+    if params[:period_from] && product.region && !product.tariffs.empty? && product.tariffs[product.region]
       product.tariffs[product.region].each do |ts|
         scs, rates, night_rates = tariff_charges(product.product_code, ts.tariff_code, ts.tariff_type, tc_opts)
         ts.sc = scs
