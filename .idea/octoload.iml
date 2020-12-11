@@ -21,6 +21,63 @@
         <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="--product FE2QFV1-DD --at 2020-12-06 --from 2020-12-06T09:00:00Z --to 2020-12-06T11:00:00Z --csv fred.csv -m &quot;Flex&quot; --postcode YO612NS" />
         <method v="2" />
       </configuration>
+      <configuration default="false" name="octoload consumption" type="RubyRunConfigurationType" factoryName="Ruby">
+        <module name="octoload" />
+        <RUBY_RUN_CONFIG NAME="RUBY_ARGS" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="WORK DIR" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="SHOULD_USE_SDK" VALUE="false" />
+        <RUBY_RUN_CONFIG NAME="ALTERN_SDK_NAME" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="myPassParentEnvs" VALUE="true" />
+        <EXTENSION ID="BundlerRunConfigurationExtension" bundleExecEnabled="true" />
+        <EXTENSION ID="JRubyRunConfigurationExtension" NailgunExecEnabled="false" />
+        <EXTENSION ID="RubyCoverageRunConfigurationExtension" track_test_folders="true" runner="rcov" ENABLE_FORKED_COVERAGE="true">
+          <COVERAGE_PATTERN ENABLED="true">
+            <PATTERN REGEXPS="/.rvm/" INCLUDED="false" />
+          </COVERAGE_PATTERN>
+        </EXTENSION>
+        <EXTENSION ID="org.jetbrains.plugins.ruby.rails.run.RailsRunConfigurationExtension" SCRATCH_USE_RAILS_RUNNER="false" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_PATH" VALUE="$MODULE_DIR$/octoload.rb" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="--consumption --from 2020-12-06T00:00:00Z --to 2020-12-07T00:00:00Z --csv /tmp/fred.csv -m &quot;Flex&quot; --postcode YO612NS" />
+        <method v="2" />
+      </configuration>
+      <configuration default="false" name="octoload comparison" type="RubyRunConfigurationType" factoryName="Ruby">
+        <module name="octoload" />
+        <RUBY_RUN_CONFIG NAME="RUBY_ARGS" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="WORK DIR" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="SHOULD_USE_SDK" VALUE="false" />
+        <RUBY_RUN_CONFIG NAME="ALTERN_SDK_NAME" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="myPassParentEnvs" VALUE="true" />
+        <EXTENSION ID="BundlerRunConfigurationExtension" bundleExecEnabled="true" />
+        <EXTENSION ID="JRubyRunConfigurationExtension" NailgunExecEnabled="false" />
+        <EXTENSION ID="RubyCoverageRunConfigurationExtension" track_test_folders="true" runner="rcov" ENABLE_FORKED_COVERAGE="true">
+          <COVERAGE_PATTERN ENABLED="true">
+            <PATTERN REGEXPS="/.rvm/" INCLUDED="false" />
+          </COVERAGE_PATTERN>
+        </EXTENSION>
+        <EXTENSION ID="org.jetbrains.plugins.ruby.rails.run.RailsRunConfigurationExtension" SCRATCH_USE_RAILS_RUNNER="false" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_PATH" VALUE="$MODULE_DIR$/octoload.rb" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="--compare FIX-12M-20-01-10 --from 2020-12-06T00:00:00Z --to 2020-12-07T00:00:00Z --csv /tmp/fred.csv -m &quot;Flex&quot; --postcode YO612NS -d" />
+        <method v="2" />
+      </configuration>
+      <configuration default="false" name="octoload tariffs" type="RubyRunConfigurationType" factoryName="Ruby">
+        <module name="octoload" />
+        <RUBY_RUN_CONFIG NAME="RUBY_ARGS" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="WORK DIR" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="SHOULD_USE_SDK" VALUE="false" />
+        <RUBY_RUN_CONFIG NAME="ALTERN_SDK_NAME" VALUE="" />
+        <RUBY_RUN_CONFIG NAME="myPassParentEnvs" VALUE="true" />
+        <EXTENSION ID="BundlerRunConfigurationExtension" bundleExecEnabled="true" />
+        <EXTENSION ID="JRubyRunConfigurationExtension" NailgunExecEnabled="false" />
+        <EXTENSION ID="RubyCoverageRunConfigurationExtension" track_test_folders="true" runner="rcov" ENABLE_FORKED_COVERAGE="true">
+          <COVERAGE_PATTERN ENABLED="true">
+            <PATTERN REGEXPS="/.rvm/" INCLUDED="false" />
+          </COVERAGE_PATTERN>
+        </EXTENSION>
+        <EXTENSION ID="org.jetbrains.plugins.ruby.rails.run.RailsRunConfigurationExtension" SCRATCH_USE_RAILS_RUNNER="false" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_PATH" VALUE="$MODULE_DIR$/octoload.rb" />
+        <RUBY_RUN_CONFIG NAME="SCRIPT_ARGS" VALUE="--products --at 2020-12-06 --from 2020-12-06T00:00:00Z --to 2020-12-06T07:00:00Z -m &quot;Agile&quot; --postcode YO612NS" />
+        <method v="2" />
+      </configuration>
     </shared>
   </component>
   <component name="NewModuleRootManager">

@@ -147,6 +147,18 @@ begin
   end
 
   #####
+  #####     CONSUMPTION
+  #####
+  if opts[:consumption]
+    csv = opts[:csv] ? CSV.open(opts[:csv], 'wb') : nil
+    params = {}
+    params[:period_from] = from if from
+    params[:period_to] = to if to
+    consumption = octo.consumption(config['mpan'], config['serial'], params)
+    output_consumption_as_csv(csv, consumption) if csv
+  end
+
+  #####
   #####     PRODUCTS
   #####
   if opts[:products]

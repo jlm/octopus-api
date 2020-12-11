@@ -50,11 +50,10 @@ class OctAPI
     octofetch("electricity-meter-points/%s" % mpan)
   end
 
-  def consumption(mpan, serial, page_size = 48, period_from = nil, period_to = nil, _group_by = nil)
-    params = { :page_size => page_size.to_s, :order_by => 'period' }
-    params[:period_from] = period_from if period_from
-    params[:period_to] = period_to if period_to
-    octofetch("electricity-meter-points/#{mpan}/meters/#{serial}/consumption/", params)
+  def consumption(mpan, serial, opts = {})
+    params = { :page_size => (7*48).to_s, :order_by => 'period' }
+    params.merge!(opts)
+    octofetch_array("electricity-meter-points/#{mpan}/meters/#{serial}/consumption/", params)
   end
 
   def products(params = {})
