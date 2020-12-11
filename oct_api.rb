@@ -187,7 +187,7 @@ class OctAPI
     begin
       response = octofetch(spec, myparams)
       result += response['results']
-      myparams[:page] = response['next'] && response['next'].split('page=')[1]
+      myparams[:page] = response['next'] && URI.decode_www_form(URI.parse(response['next']).query).to_h['page']
     end while myparams[:page]
     result
   end
