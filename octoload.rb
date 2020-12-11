@@ -25,6 +25,7 @@ require 'yaml'
 require 'nokogiri'
 require 'logger'
 require 'csv'
+require 'active_support/core_ext/numeric/time'
 
 require './oct_api'
 
@@ -36,6 +37,25 @@ class Time
     arr[2] = 0
     Time.local *arr
   end
+end
+END_TIME = Time.parse('2116-02-19')
+
+def mktime_from(timestr)
+  Time.parse(timestr).localtime(0)
+rescue => e
+  $logger.debug("mktime_from: parsing '#{timestr.inspect}' gives #{e.to_s}")
+  Time.at(0)
+end
+
+def mktime_to(timestr)
+  if timestr.nil?
+    END_TIME
+  else
+    Time.parse(timestr).localtime(0)
+  end
+rescue => e
+  $logger.warn("mktime_to: parsing '#{timestr.inspect}' gives #{e.to_s}")
+  END_TIME
 end
 
 def print_tariff_summary(ts)
@@ -75,6 +95,59 @@ def print_tariff_charge(rate, rate_name = '', rate_unit = 'p/kWh')
   puts "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}"
 end
 
+# Output the consumption data to a CSV file, if selected
+# The header row says "Date," and then 00:00,00:30,01:00,01:30 etc.
+# @param [CSV] csv already-opened CSV object to write to
+# @param [Array<Hash{String=>String,Float}>] results Array of consumption slots
+# @return [void]
+def output_consumption_as_csv(csv, results)
+  row = ['Date']
+  48.times do |col|
+    row << Time.parse(results[col]['interval_start']).getlocal(0).strftime('%H:%M')
+  end
+  csv << row
+  ######
+  # Each line in the table starts with YYYY-MM-DD and then real numbers giving consumption in kWh per slot
+  ######
+  (0..(results.length / 48 - 1)).each { |rowno|
+    row = []
+    row << Time.parse(results[48 * rowno]['interval_start']).getlocal(0).strftime("%Y-%m-%d")
+    48.times do |col|
+      row << results[48 * rowno + col]['consumption'].to_f
+    end
+    csv << row
+  }
+  csv.close
+end
+
+def process_bucket(bucket, bucket_no, iter, start, sc)
+  $logger.info("#{start.to_s}: bucket #{bucket_no} full after #{iter} iterations; sc: #{sc}; cost: #{bucket}")
+end
+
+# Find a rate applicable during an interval, in an array of intervals
+# @param [Array<Hash>] ratelist Array of (valid_from, valid_to, value) tuples
+# @param [Object] start start time of interval to search for
+# @param [Object] finish finish time of interval to search for
+# @return [Float] the rate found
+def find_rate(ratelist, start, finish)
+  ratelist.each do |tslot|
+    valid_from = mktime_from(tslot['valid_from'])
+    valid_to = mktime_to(tslot['valid_to'])
+    if start.between?(valid_from, valid_to)
+      # $logger.debug("cons slot start #{start.to_s}: found rate slot #{valid_from.to_s} to #{valid_to.to_s}")
+      if finish.between?(valid_from, valid_to)
+        # $logger.debug("...and it includes the finish time too: #{finish.to_s}")
+        return tslot['value_inc_vat'].to_f
+      else
+        $logger.fatal("finish time of consumption time slot was after end of tariff validity slot")
+        abort('fatal error')
+      end
+    end
+  end
+  $logger.fatal("no matching rate found")
+  abort('fatal error')
+end
+
 ###
 ###   MAIN PROGRAM
 ###
@@ -94,6 +167,8 @@ begin
     o.bool   '--products', 'retrieve product information from the Octopus API'
     o.string '-m', '--match', 'select products matching the given string in their display name'
     o.string '--product', 'retrieve details of a single product'
+    o.string '--compare', 'compare specified product with matching available products based on consumption'
+    o.string '--period', 'comparison period, such as 2.weeks'
     o.bool '--export', 'include Export products'
     o.on '--help' do
       STDERR.puts o
@@ -127,9 +202,13 @@ begin
   end
 =end
 
-  from = opts[:from] ? Time.parse(opts[:from]).iso8601 : nil
-  to = opts[:to] ? Time.parse(opts[:to]).iso8601 : nil
+  from_time = opts[:from] ? mktime_from(opts[:from]) : nil
+  from = opts[:from] ? from_time.iso8601 : nil
+  to_time = opts[:to] ? mktime_to(opts[:to]) : nil
+  to = opts[:to] ? to_time.iso8601 : nil
   at = opts[:at] ? Time.parse(opts[:at]).iso8601 : nil
+  bucket_length = eval(config['period'] || '1.week')
+  bucket_length = eval(opts[:period]) if opts[:period]
 
   $logger.debug("from: #{from.to_s}; to: #{to.to_s}; at: #{at.to_s}")
 
@@ -149,7 +228,7 @@ begin
   #####
   #####     CONSUMPTION
   #####
-  if opts[:consumption]
+  if opts[:consumption] || opts[:compare]
     csv = opts[:csv] ? CSV.open(opts[:csv], 'wb') : nil
     params = {}
     params[:period_from] = from if from
@@ -161,65 +240,84 @@ begin
   #####
   #####     PRODUCTS
   #####
-  if opts[:products]
-    params = at ? { available_at: at } : nil
-    products = octo.products(params)
-    products.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
-    products.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
-    products.each do |product|
+  if opts[:compare]
+    pd_params = {}
+    pd_params[:tariffs_active_at] = at if at
+    pd_params[:period_from] = from if from
+    pd_params[:period_to] = to if to
+    comparator = octo.product(opts[:compare], pd_params)
+    puts 'Comparator tariff:'
+    print_product(opts[:compare], comparator)
+  end
+
+  products = []
+  if opts[:products] || opts[:compare]
+    params = at ? { available_at: at } : {}
+    prods = octo.products(params)
+    prods.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
+    prods.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
+    prods.each do |prod|
       pd_params = {}
       pd_params[:tariffs_active_at] = at if at
       pd_params[:period_from] = from if from
       pd_params[:period_to] = to if to
 
-      # @type [Product] prod_details
-      prod_details = octo.product(product['code'], pd_params)
-      if prod_details.region.nil?
-        $logger.warn('specify a postcode to allow retrieval of tariff charges')
+      # Local variables:
+      # @type [Time] from app-level period start
+      # @type [Time] to app-level period end
+      # @type [Time] start consumption slot start
+      # @type [Time] finish consumption slot end
+      # @type [Time] valid_from tariff slot start
+      # @type [Time] valid_to tariff slot end
+      # @type [Product] product
+      products << product = octo.product(prod['code'], pd_params)
+      $logger.warn('specify a postcode to allow retrieval of tariff charges') if product.region.nil?
+      print_product(prod['code'], product) if opts[:products]
+      if opts[:compare]
+        unless product.tariffs[product.region]
+          $logger.debug("skipping product #{product.product_code} as it has no tariffs for region #{product.region}")
+          next
+        end
+        product.tariffs[product.region].each do |tariff|
+          if tariff.tariff_type != :sr_elec
+            $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
+            next
+          end
+          $logger.info("Comparing to tariff #{tariff.tariff_code}...")
+          bucket_marker = 0
+          bucket = standing_charge = 0
+          day_marker = 0
+          consumption.each do |slot|
+            start = mktime_from(slot['interval_start'])
+            finish = mktime_to(slot['interval_end'])
+            usage = slot['consumption'].to_f
+            bucket_number = (start - from_time).to_i / bucket_length
+            day_number = (start - from_time).to_i / 1.day.to_i
+            if day_number > day_marker
+              standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
+              day_marker = day_number
+            end
+
+            # End of period:
+            if bucket_number > bucket_marker
+              process_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
+              bucket = 0
+              bucket_marker = bucket_number
+              standing_charge = 0
+            end
+            bucket += usage * find_rate(tariff.sur, start, finish)
+          end
+        end
       end
-      print_product(product['code'], prod_details)
     end
   end
 
   if opts[:product]
-    params = at ? { tariffs_active_at: at } : nil
-    p = octo.product(opts[:product], params)
+    pd_params = {}
+    pd_params[:tariffs_active_at] = at if at
+    pd_params[:period_from] = from if from
+    pd_params[:period_to] = to if to
+    p = octo.product(opts[:product], pd_params)
     print_product(opts[:product], p)
-  end
-
-  #####
-  #####     CONSUMPTION
-  #####
-  if opts[:consumption]
-    if opts[:csv]
-      csv = CSV.open(opts[:csv], 'wb')
-    else
-      csv = nil
-    end
-
-    cons = octo.consumption(config['mpan'], config['serial'], 25000, from, to)
-    results = cons['results']
-    ######
-    # Output the consumption data to a CSV file, if selected
-    # The header row says "Date," and then 00:00,00:30,01:00,01:30 etc.
-    ######
-    row = ['Date']
-    48.times do |col|
-      row << Time.parse(results[col]['interval_start']).getlocal(0).strftime('%H:%M')
-    end
-    csv << row if csv
-    ######
-    # Each line in the table starts with YYYY-MM-DD and then real numbers giving consumption in kWh per slot
-    ######
-    (0..(results.length / 48 - 1)).each { |rowno|
-      row = []
-      row << Time.parse(results[48 * rowno]['interval_start']).getlocal(0).strftime("%Y-%m-%d")
-      48.times do |col|
-        row << results[48 * rowno + col]['consumption'].to_f
-      end
-      csv << row if csv
-    }
-
-    csv.close if csv
   end
 end
