@@ -42,8 +42,8 @@ END_TIME = Time.parse('2116-02-19')
 
 def mktime_from(timestr)
   Time.parse(timestr).localtime(0)
-rescue => e
-  $logger.debug("mktime_from: parsing '#{timestr.inspect}' gives #{e.to_s}")
+rescue => _e
+  #$logger.debug("mktime_from: parsing '#{timestr.inspect}' gives #{e.to_s}")
   Time.at(0)
 end
 
@@ -120,8 +120,8 @@ def output_consumption_as_csv(csv, results)
   csv.close
 end
 
-def process_bucket(bucket, bucket_no, iter, start, sc)
-  $logger.info("#{start.to_s}: bucket #{bucket_no} full after #{iter} iterations; sc: #{sc}; cost: #{bucket}")
+def report_bucket(bucket, bucket_no, iter, start, sc)
+  $logger.debug("#{start.to_s}: bucket #{bucket_no} full after #{iter} iterations; sc: #{sc}; cost: #{bucket}")
 end
 
 # Find a rate applicable during an interval, in an array of intervals
@@ -139,13 +139,73 @@ def find_rate(ratelist, start, finish)
         # $logger.debug("...and it includes the finish time too: #{finish.to_s}")
         return tslot['value_inc_vat'].to_f
       else
-        $logger.fatal("finish time of consumption time slot was after end of tariff validity slot")
-        abort('fatal error')
+        $logger.warn("finish time of consumption time slot was after end of tariff validity slot")
+        #abort('fatal error')
       end
     end
   end
-  $logger.fatal("no matching rate found")
-  abort('fatal error')
+  raise ArgumentError, "no matching rate found for interval #{start.to_s} to #{finish.to_s}"
+  #abort('fatal error')
+end
+
+def do_product(product, from_time, period_length, consumption, opts)
+  # Local variables:
+  # @type [Time] from app-level period start
+  # @type [Time] to app-level period end
+  # @type [Time] start consumption slot start
+  # @type [Time] finish consumption slot end
+  # @type [Time] valid_from tariff slot start
+  # @type [Time] valid_to tariff slot end
+  # @type [Product] product
+  $logger.warn('specify a postcode to allow retrieval of tariff charges') if product.region.nil?
+  print_product(product.product_code, product) if opts[:products]
+  total_tc = total_sc = 0
+  if opts[:compare]
+    unless product.tariffs[product.region]
+      raise ArgumentError, "skipping product #{product.product_code} as it has no tariffs for region #{product.region}"
+    end
+    product.tariffs[product.region].each do |tariff|
+      if tariff.tariff_type != :sr_elec
+        $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
+        next
+      end
+      $logger.info("Comparing to tariff #{tariff.tariff_code}...")
+      bucket_marker = 0
+      bucket = standing_charge = 0
+      day_marker = 0
+      consumption.each do |slot|
+        start = mktime_from(slot['interval_start'])
+        finish = mktime_to(slot['interval_end'])
+        usage = slot['consumption'].to_f
+        bucket_number = (start - from_time).to_i / period_length
+        day_number = (start - from_time).to_i / 1.day.to_i
+        if day_number > day_marker
+          begin
+            standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
+          rescue ArgumentError => e
+            $logger.warn("standing charge: #{e.message}")
+          end
+          day_marker = day_number
+        end
+
+        # End of period:
+        if bucket_number > bucket_marker
+          report_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
+          total_sc += standing_charge
+          total_tc += bucket
+          bucket = 0
+          bucket_marker = bucket_number
+          standing_charge = 0
+        end
+        bucket += usage * find_rate(tariff.sur, start, finish)
+      rescue ArgumentError => e
+        $logger.warn("tariff charge: #{e.message}")
+        $missing_rate += 1
+        abort('too many missing rates') if $missing_rate > 5
+      end
+    end
+  end
+  [total_sc, total_tc]
 end
 
 ###
@@ -155,6 +215,7 @@ begin
   opts = Slop.parse do |o|
     o.string '-s', '--secrets', 'secrets YAML file name', default: 'secrets.yml'
     o.bool   '-d', '--debug', 'debug mode'
+    o.bool   '-v', '--verbose', 'be verbose: list all comparison results'
     o.bool   '-p', '--slackpost', 'post alerts to Slack for new items'
     o.string '--postcode', 'installation postcode'
     o.string '--emps', 'list electricity meter points for a given MPAN'
@@ -181,7 +242,7 @@ begin
   # Set up logging
   $_debug = opts.debug?
   $logger = Logger.new(STDERR)
-  $logger.level = Logger::INFO
+  $logger.level = config['loggerlevel'] ? eval(config['loggerlevel']) : Logger::ERROR
   $logger.level = Logger::DEBUG if $_debug
   #
   # Set up debugging through Charles Proxy
@@ -202,11 +263,12 @@ begin
   end
 =end
 
-  from_time = opts[:from] ? mktime_from(opts[:from]) : nil
+  $missing_rate = 0
+  from_time = (opts[:from] ? mktime_from(opts[:from]) : nil) || abort('--from must specify a valid date/time')
   from = opts[:from] ? from_time.iso8601 : nil
-  to_time = opts[:to] ? mktime_to(opts[:to]) : nil
+  to_time = (opts[:to] ? mktime_to(opts[:to]) : nil) || abort('--to must specify a valid date/time')
   to = opts[:to] ? to_time.iso8601 : nil
-  at = opts[:at] ? Time.parse(opts[:at]).iso8601 : nil
+  at = opts[:at] ? Time.parse(opts[:at]).iso8601 : from
   bucket_length = eval(config['period'] || '1.week')
   bucket_length = eval(opts[:period]) if opts[:period]
 
@@ -228,29 +290,32 @@ begin
   #####
   #####     CONSUMPTION
   #####
+  consumption = nil
   if opts[:consumption] || opts[:compare]
     csv = opts[:csv] ? CSV.open(opts[:csv], 'wb') : nil
     params = {}
     params[:period_from] = from if from
     params[:period_to] = to if to
-    consumption = octo.consumption(config['mpan'], config['serial'], params)
+    consumption = octo.consumption(config['mpan'], config['serial'], params) || abort('no consumption data available')
+
     output_consumption_as_csv(csv, consumption) if csv
   end
 
   #####
   #####     PRODUCTS
   #####
+  comparison = {}
+
   if opts[:compare]
     pd_params = {}
     pd_params[:tariffs_active_at] = at if at
     pd_params[:period_from] = from if from
     pd_params[:period_to] = to if to
     comparator = octo.product(opts[:compare], pd_params)
-    puts 'Comparator tariff:'
-    print_product(opts[:compare], comparator)
+    puts "Comparator tariff: #{opts[:compare]}"
+    comparison[opts['compare']] = do_product(comparator, from_time, bucket_length, consumption, opts)
   end
 
-  products = []
   if opts[:products] || opts[:compare]
     params = at ? { available_at: at } : {}
     prods = octo.products(params)
@@ -262,54 +327,30 @@ begin
       pd_params[:period_from] = from if from
       pd_params[:period_to] = to if to
 
-      # Local variables:
-      # @type [Time] from app-level period start
-      # @type [Time] to app-level period end
-      # @type [Time] start consumption slot start
-      # @type [Time] finish consumption slot end
-      # @type [Time] valid_from tariff slot start
-      # @type [Time] valid_to tariff slot end
-      # @type [Product] product
-      products << product = octo.product(prod['code'], pd_params)
-      $logger.warn('specify a postcode to allow retrieval of tariff charges') if product.region.nil?
-      print_product(prod['code'], product) if opts[:products]
-      if opts[:compare]
-        unless product.tariffs[product.region]
-          $logger.debug("skipping product #{product.product_code} as it has no tariffs for region #{product.region}")
-          next
-        end
-        product.tariffs[product.region].each do |tariff|
-          if tariff.tariff_type != :sr_elec
-            $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
-            next
-          end
-          $logger.info("Comparing to tariff #{tariff.tariff_code}...")
-          bucket_marker = 0
-          bucket = standing_charge = 0
-          day_marker = 0
-          consumption.each do |slot|
-            start = mktime_from(slot['interval_start'])
-            finish = mktime_to(slot['interval_end'])
-            usage = slot['consumption'].to_f
-            bucket_number = (start - from_time).to_i / bucket_length
-            day_number = (start - from_time).to_i / 1.day.to_i
-            if day_number > day_marker
-              standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
-              day_marker = day_number
-            end
-
-            # End of period:
-            if bucket_number > bucket_marker
-              process_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
-              bucket = 0
-              bucket_marker = bucket_number
-              standing_charge = 0
-            end
-            bucket += usage * find_rate(tariff.sur, start, finish)
-          end
-        end
+      sc, tc = do_product(octo.product(prod['code'], pd_params), from_time, bucket_length, consumption, opts)
+      comparison[prod['code']] = [sc, tc] unless sc == 0 && tc == 0
+    rescue ArgumentError => e
+      $logger.debug(e.message)
+    end
+  end
+  if opts[:compare]
+    comparator_result = comparison[opts['compare']]
+    comparator_total = (comparator_result[0] + comparator_result[1] + 0.0) / 100.0
+    ranked = comparison.sort{|a,b| (a[1][0]+a[1][1]) <=> (b[1][0]+b[1][1])}.reverse
+    if opts['verbose']
+      ranked.each do |code, costs|
+        sc, tc = costs
+        sc_str = "%5.2f" % sc
+        tc_str = "%5.2f" % tc
+        total_str = "£%5.2f" % ((sc + tc + 0.0) / 100.0)
+        code_str = "%28s" % (code == opts['compare'] ? "*** " + code : code)
+        puts "#{code_str}: Standing charges: #{sc_str}, tariff charges #{tc_str}; total #{total_str}"
       end
     end
+    winning_total = (ranked.last[1][0] + ranked.last[1][1] + 0.0) / 100.0
+    winning_prodcode = ranked.last[0]
+
+    puts "Period commencing #{from_time.strftime('%Y-%m-%d')}: #{winning_prodcode} at #{"£%5.2f" % winning_total} saves #{"£%5.2f" % (comparator_total - winning_total)}"
   end
 
   if opts[:product]
