@@ -227,6 +227,7 @@ begin
     o.string '--csv', 'write output to this file in CSV format'
     o.bool   '--products', 'retrieve product information from the Octopus API'
     o.string '-m', '--match', 'select products matching the given string in their display name'
+    o.string  '-b', '--brand', 'select products matching the given string in their brand'
     o.string '--product', 'retrieve details of a single product'
     o.string '--compare', 'compare specified product with matching available products based on consumption'
     o.string '--period', 'comparison period, such as 2.weeks'
@@ -264,13 +265,23 @@ begin
 =end
 
   $missing_rate = 0
-  from_time = (opts[:from] ? mktime_from(opts[:from]) : nil) || abort('--from must specify a valid date/time')
-  from = opts[:from] ? from_time.iso8601 : nil
-  to_time = (opts[:to] ? mktime_to(opts[:to]) : nil) || abort('--to must specify a valid date/time')
-  to = opts[:to] ? to_time.iso8601 : nil
+  if opts[:from]
+    from_time = mktime_from(opts[:from]) || abort('--from must specify a valid date/time')
+    from = from_time.iso8601
+  else
+    from = nil
+  end
+  if opts[:to]
+    to_time = mktime_to(opts[:to]) || abort('--to must specify a valid date/time')
+    to = to_time.iso8601
+  else
+    to = nil
+  end
   at = opts[:at] ? Time.parse(opts[:at]).iso8601 : from
   bucket_length = eval(config['period'] || '1.week')
   bucket_length = eval(opts[:period]) if opts[:period]
+  brand = config['brand']
+  brand = opts[:brand] if opts[:brand]
 
   $logger.debug("from: #{from.to_s}; to: #{to.to_s}; at: #{at.to_s}")
 
@@ -320,6 +331,7 @@ begin
     params = at ? { available_at: at } : {}
     prods = octo.products(params)
     prods.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
+    prods.select! { |p| p['brand'].match(Regexp.new(brand)) } if brand
     prods.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
     prods.each do |prod|
       pd_params = {}
