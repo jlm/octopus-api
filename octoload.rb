@@ -270,6 +270,8 @@ begin
     from = from_time.iso8601
   else
     from = nil
+    from_time = nil
+    abort('must specify --from <fromtime> with --compare') if opts[:compare]
   end
   if opts[:to]
     to_time = mktime_to(opts[:to]) || abort('--to must specify a valid date/time')
@@ -362,6 +364,7 @@ begin
     winning_total = (ranked.last[1][0] + ranked.last[1][1] + 0.0) / 100.0
     winning_prodcode = ranked.last[0]
 
+    #noinspection RubyNilAnalysis
     puts "Period commencing #{from_time.strftime('%Y-%m-%d')}: #{winning_prodcode} at #{"£%5.2f" % winning_total} saves #{"£%5.2f" % (comparator_total - winning_total)}"
   end
 
