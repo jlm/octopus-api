@@ -208,6 +208,50 @@ def do_product(product, from_time, period_length, consumption, opts)
   [total_sc, total_tc]
 end
 
+TariffComparison = Struct.new(:code, :sc, :tc, :total, :saving, :comparator?, :keyword_init => true) do
+  def to_json(state = nil)
+    self.to_h.to_json(state)
+  end
+
+  def to_s
+    sc_str = "%5.2f" % sc
+    tc_str = "%5.2f" % tc
+    total_str = "£%5.2f" % total
+    saving_str = "£%5.2f" % saving
+    code_str = "%28s" % (comparator? ? "*** " + code : code)
+    "#{code_str}: Standing charges: #{sc_str}, tariff charges #{tc_str}; total #{total_str}, saving: #{saving_str}"
+  end
+end
+
+Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, :keyword_init => true) do
+  def winner
+    self.alternatives.last
+  end
+
+  def to_json(state = nil)
+    result = self.to_h
+    result[:winner] = self.winner.to_h
+    result.to_json(state)
+  end
+
+  def to_s(verbose = nil)
+    result = ''
+    result << "Period: #{period_start.strftime('%Y-%m-%d')}"
+    result << "..#{period_end.strftime('%Y-%m-%d')}" if period_end
+    result << " Comparator: #{comparator.code} "
+    if verbose
+      result << "\n"
+      result << (alternatives.each { |a| a.to_s}).join("\n")
+      result << "\n"
+    end
+    result << "Winner: #{self.winner.code}: Total: #{'£%5.2f' % self.winner.total}, Saving: #{'£%5.2f' % self.winner.saving}"
+  end
+end
+
+def pence2pounds(p)
+  (p + 0.0) / 100.0
+end
+
 ###
 ###   MAIN PROGRAM
 ###
@@ -216,6 +260,7 @@ begin
     o.string '-s', '--secrets', 'secrets YAML file name', default: 'secrets.yml'
     o.bool   '-d', '--debug', 'debug mode'
     o.bool   '-v', '--verbose', 'be verbose: list all comparison results'
+    o.bool   '-j', '--json', 'output results in JSON'
     o.bool   '-p', '--slackpost', 'post alerts to Slack for new items'
     o.string '--postcode', 'installation postcode'
     o.string '--emps', 'list electricity meter points for a given MPAN'
@@ -325,7 +370,7 @@ begin
     pd_params[:period_from] = from if from
     pd_params[:period_to] = to if to
     comparator = octo.product(opts[:compare], pd_params)
-    puts "Comparator tariff: #{opts[:compare]}"
+    puts "Comparator tariff: #{opts[:compare]}" unless opts[:json]
     comparison[opts['compare']] = do_product(comparator, from_time, bucket_length, consumption, opts)
   end
 
@@ -344,28 +389,30 @@ begin
       sc, tc = do_product(octo.product(prod['code'], pd_params), from_time, bucket_length, consumption, opts)
       comparison[prod['code']] = [sc, tc] unless sc == 0 && tc == 0
     rescue ArgumentError => e
-      $logger.debug(e.message)
+      $logger.warn(e.message)
     end
   end
-  if opts[:compare]
-    comparator_result = comparison[opts['compare']]
-    comparator_total = (comparator_result[0] + comparator_result[1] + 0.0) / 100.0
-    ranked = comparison.sort{|a,b| (a[1][0]+a[1][1]) <=> (b[1][0]+b[1][1])}.reverse
-    if opts['verbose']
-      ranked.each do |code, costs|
-        sc, tc = costs
-        sc_str = "%5.2f" % sc
-        tc_str = "%5.2f" % tc
-        total_str = "£%5.2f" % ((sc + tc + 0.0) / 100.0)
-        code_str = "%28s" % (code == opts['compare'] ? "*** " + code : code)
-        puts "#{code_str}: Standing charges: #{sc_str}, tariff charges #{tc_str}; total #{total_str}"
-      end
-    end
-    winning_total = (ranked.last[1][0] + ranked.last[1][1] + 0.0) / 100.0
-    winning_prodcode = ranked.last[0]
 
-    #noinspection RubyNilAnalysis
-    puts "Period commencing #{from_time.strftime('%Y-%m-%d')}: #{winning_prodcode} at #{"£%5.2f" % winning_total} saves #{"£%5.2f" % (comparator_total - winning_total)}"
+  if opts[:compare]
+    sc, tc  = comparison[opts['compare']]
+    comparator_total = pence2pounds(sc + tc)
+    ranked = comparison.sort{|a,b| (a[1][0]+a[1][1]) <=> (b[1][0]+b[1][1])}.reverse
+    comparison_record = Comparison.new(
+      :period_start => from_time,
+      :comparator => TariffComparison.new(:code => opts[:compare], :sc => sc, :tc => tc, :total => comparator_total, :saving => 0, :comparator? => true),
+      :alternatives => Array.new(ranked.length) do |i|
+        code = ranked[i][0]
+        sc, tc = ranked[i][1]
+        total = pence2pounds(sc + tc)
+        TariffComparison.new(:code => code, :sc => sc, :tc => tc, :total => total, :saving => comparator_total - total, :comparator? => code == opts[:compare])
+      end
+    )
+
+    if opts[:json]
+      puts comparison_record.to_json
+    else
+      puts comparison_record.to_s(opts['verbose'])
+    end
   end
 
   if opts[:product]
