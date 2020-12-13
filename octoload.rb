@@ -385,7 +385,7 @@ begin
     prods = octo.products(params)
     prods.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
     prods.select! { |p| p['brand'].match(Regexp.new(brand)) } if brand
-    prods.select! { |p| p['direction'] == 'IMPORT' } unless opts[:export]
+    prods.select! { |p| p['direction'] == (opts[:export] ? 'EXPORT' : 'IMPORT') }
     prods.each do |prod|
       pd_params = {}
       pd_params[:tariffs_active_at] = at if at
