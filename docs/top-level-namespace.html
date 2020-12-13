@@ -122,7 +122,7 @@
         <li class="public ">
   <span class="summary_signature">
     
-      <a href="top-level-namespace.html#do_product-instance_method" title="#do_product (instance method)">#<strong>do_product</strong>(product, from_time, period_length, consumption, opts)  &#x21d2; Object </a>
+      <a href="top-level-namespace.html#calc_charges-instance_method" title="#calc_charges (instance method)">#<strong>calc_charges</strong>(product, from_time, period_length, consumption)  &#x21d2; Array&lt;Integer&gt; </a>
     
 
     
@@ -136,7 +136,9 @@
   
 
   
-    <span class="summary_desc"><div class='inline'></div></span>
+    <span class="summary_desc"><div class='inline'>
+<p>Given a Product, calculate the charges over a period of time based on provided consumption records.</p>
+</div></span>
   
 </li>
 
@@ -353,28 +355,112 @@
 
     
       <div class="method_details first">
-  <h3 class="signature first" id="do_product-instance_method">
+  <h3 class="signature first" id="calc_charges-instance_method">
   
-    #<strong>do_product</strong>(product, from_time, period_length, consumption, opts)  &#x21d2; <tt>Object</tt> 
-  
-
+    #<strong>calc_charges</strong>(product, from_time, period_length, consumption)  &#x21d2; <tt>Array&lt;Integer&gt;</tt> 
   
 
   
-</h3><table class="source_code">
+
+  
+</h3><div class="docstring">
+  <div class="discussion">
+    
+<p>Given a Product, calculate the charges over a period of time based on provided consumption records. Consumption is specified as array of tuples <tt>:interval_start, :interval_end, :consumption</tt> as returned by <code>#consumption</code> and specified in <a href="https://developer.octopus.energy/docs/api/#consumption">developer.octopus.energy/docs/api/#consumption</a>.</p>
+
+
+  </div>
+</div>
+<div class="tags">
+  <p class="tag_title">Parameters:</p>
+<ul class="param">
+  
+    <li>
+      
+        <span class='name'>product</span>
+      
+      
+        <span class='type'>(<tt>Product</tt>)</span>
+      
+      
+      
+    </li>
+  
+    <li>
+      
+        <span class='name'>from_time</span>
+      
+      
+        <span class='type'>(<tt><span class='object_link'><a href="Time.html" title="Time (class)">Time</a></span></tt>)</span>
+      
+      
+      
+        &mdash;
+        <div class='inline'>
+<p>start comparison at this time</p>
+</div>
+      
+    </li>
+  
+    <li>
+      
+        <span class='name'>period_length</span>
+      
+      
+        <span class='type'>(<tt>ActiveSupport::Duration</tt>)</span>
+      
+      
+      
+        &mdash;
+        <div class='inline'>
+<p>length of period in seconds or as a Duration</p>
+</div>
+      
+    </li>
+  
+    <li>
+      
+        <span class='name'>consumption</span>
+      
+      
+        <span class='type'>(<tt>Array&lt;Hash{String=&gt;Float,String}&gt;</tt>)</span>
+      
+      
+      
+        &mdash;
+        <div class='inline'>
+<p>Consumption records for the period</p>
+</div>
+      
+    </li>
+  
+</ul>
+
+<p class="tag_title">Returns:</p>
+<ul class="return">
+  
+    <li>
+      
+      
+        <span class='type'>(<tt>Array&lt;Integer&gt;</tt>)</span>
+      
+      
+      
+        &mdash;
+        <div class='inline'>
+<p>array with two integers, representing the total standing charge and the total tariff charge for the period, in pence</p>
+</div>
+      
+    </li>
+  
+</ul>
+
+</div><table class="source_code">
   <tr>
     <td>
       <pre class="lines">
 
 
-151
-152
-153
-154
-155
-156
-157
-158
 159
 160
 161
@@ -425,12 +511,16 @@
 206
 207
 208
-209</pre>
+209
+210
+211
+212
+213</pre>
     </td>
     <td>
-      <pre class="code"><span class="info file"># File 'octoload.rb', line 151</span>
+      <pre class="code"><span class="info file"># File 'octoload.rb', line 159</span>
 
-<span class='kw'>def</span> <span class='id identifier rubyid_do_product'>do_product</span><span class='lparen'>(</span><span class='id identifier rubyid_product'>product</span><span class='comma'>,</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='comma'>,</span> <span class='id identifier rubyid_period_length'>period_length</span><span class='comma'>,</span> <span class='id identifier rubyid_consumption'>consumption</span><span class='comma'>,</span> <span class='id identifier rubyid_opts'>opts</span><span class='rparen'>)</span>
+<span class='kw'>def</span> <span class='id identifier rubyid_calc_charges'>calc_charges</span><span class='lparen'>(</span><span class='id identifier rubyid_product'>product</span><span class='comma'>,</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='comma'>,</span> <span class='id identifier rubyid_period_length'>period_length</span><span class='comma'>,</span> <span class='id identifier rubyid_consumption'>consumption</span><span class='rparen'>)</span>
   <span class='comment'># Local variables:
 </span>  <span class='comment'># @type [Time] from app-level period start
 </span>  <span class='comment'># @type [Time] to app-level period end
@@ -438,53 +528,49 @@
 </span>  <span class='comment'># @type [Time] finish consumption slot end
 </span>  <span class='comment'># @type [Time] valid_from tariff slot start
 </span>  <span class='comment'># @type [Time] valid_to tariff slot end
-</span>  <span class='comment'># @type [Product] product
 </span>  <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_warn'>warn</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>specify a postcode to allow retrieval of tariff charges</span><span class='tstring_end'>&#39;</span></span><span class='rparen'>)</span> <span class='kw'>if</span> <span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='period'>.</span><span class='id identifier rubyid_nil?'>nil?</span>
-  <span class='id identifier rubyid_print_product'><span class='object_link'><a href="#print_product-instance_method" title="#print_product (method)">print_product</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_product_code'>product_code</span><span class='comma'>,</span> <span class='id identifier rubyid_product'>product</span><span class='rparen'>)</span> <span class='kw'>if</span> <span class='id identifier rubyid_opts'>opts</span><span class='lbracket'>[</span><span class='symbol'>:products</span><span class='rbracket'>]</span>
   <span class='id identifier rubyid_total_tc'>total_tc</span> <span class='op'>=</span> <span class='id identifier rubyid_total_sc'>total_sc</span> <span class='op'>=</span> <span class='int'>0</span>
-  <span class='kw'>if</span> <span class='id identifier rubyid_opts'>opts</span><span class='lbracket'>[</span><span class='symbol'>:compare</span><span class='rbracket'>]</span>
-    <span class='kw'>unless</span> <span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_tariffs'>tariffs</span><span class='lbracket'>[</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='rbracket'>]</span>
-      <span class='id identifier rubyid_raise'>raise</span> <span class='const'>ArgumentError</span><span class='comma'>,</span> <span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>skipping product </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_product_code'>product_code</span><span class='embexpr_end'>}</span><span class='tstring_content'> as it has no tariffs for region </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span>
+  <span class='kw'>unless</span> <span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_tariffs'>tariffs</span><span class='lbracket'>[</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='rbracket'>]</span>
+    <span class='id identifier rubyid_raise'>raise</span> <span class='const'>ArgumentError</span><span class='comma'>,</span> <span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>skipping product </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_product_code'>product_code</span><span class='embexpr_end'>}</span><span class='tstring_content'> as it has no tariffs for region </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span>
+  <span class='kw'>end</span>
+  <span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_tariffs'>tariffs</span><span class='lbracket'>[</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='rbracket'>]</span><span class='period'>.</span><span class='id identifier rubyid_each'>each</span> <span class='kw'>do</span> <span class='op'>|</span><span class='id identifier rubyid_tariff'>tariff</span><span class='op'>|</span>
+    <span class='kw'>if</span> <span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_type'>tariff_type</span> <span class='op'>!=</span> <span class='symbol'>:sr_elec</span>
+      <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_debug'>debug</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>skipping tariff </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_code'>tariff_code</span><span class='embexpr_end'>}</span><span class='tstring_content'> of type </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_type'>tariff_type</span><span class='period'>.</span><span class='id identifier rubyid_to_s'>to_s</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
+      <span class='kw'>next</span>
     <span class='kw'>end</span>
-    <span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_tariffs'>tariffs</span><span class='lbracket'>[</span><span class='id identifier rubyid_product'>product</span><span class='period'>.</span><span class='id identifier rubyid_region'>region</span><span class='rbracket'>]</span><span class='period'>.</span><span class='id identifier rubyid_each'>each</span> <span class='kw'>do</span> <span class='op'>|</span><span class='id identifier rubyid_tariff'>tariff</span><span class='op'>|</span>
-      <span class='kw'>if</span> <span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_type'>tariff_type</span> <span class='op'>!=</span> <span class='symbol'>:sr_elec</span>
-        <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_debug'>debug</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>skipping tariff </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_code'>tariff_code</span><span class='embexpr_end'>}</span><span class='tstring_content'> of type </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_type'>tariff_type</span><span class='period'>.</span><span class='id identifier rubyid_to_s'>to_s</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
-        <span class='kw'>next</span>
-      <span class='kw'>end</span>
-      <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_info'>info</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>Comparing to tariff </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_code'>tariff_code</span><span class='embexpr_end'>}</span><span class='tstring_content'>...</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
-      <span class='id identifier rubyid_bucket_marker'>bucket_marker</span> <span class='op'>=</span> <span class='int'>0</span>
-      <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>=</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>=</span> <span class='int'>0</span>
-      <span class='id identifier rubyid_day_marker'>day_marker</span> <span class='op'>=</span> <span class='int'>0</span>
-      <span class='id identifier rubyid_consumption'>consumption</span><span class='period'>.</span><span class='id identifier rubyid_each'>each</span> <span class='kw'>do</span> <span class='op'>|</span><span class='id identifier rubyid_slot'>slot</span><span class='op'>|</span>
-        <span class='id identifier rubyid_start'>start</span> <span class='op'>=</span> <span class='id identifier rubyid_mktime_from'><span class='object_link'><a href="#mktime_from-instance_method" title="#mktime_from (method)">mktime_from</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>interval_start</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='rparen'>)</span>
-        <span class='id identifier rubyid_finish'>finish</span> <span class='op'>=</span> <span class='id identifier rubyid_mktime_to'><span class='object_link'><a href="#mktime_to-instance_method" title="#mktime_to (method)">mktime_to</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>interval_end</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='rparen'>)</span>
-        <span class='id identifier rubyid_usage'>usage</span> <span class='op'>=</span> <span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>consumption</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='period'>.</span><span class='id identifier rubyid_to_f'>to_f</span>
-        <span class='id identifier rubyid_bucket_number'>bucket_number</span> <span class='op'>=</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='id identifier rubyid_period_length'>period_length</span>
-        <span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>=</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='int'>1</span><span class='period'>.</span><span class='id identifier rubyid_day'>day</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span>
-        <span class='kw'>if</span> <span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>&gt;</span> <span class='id identifier rubyid_day_marker'>day_marker</span>
-          <span class='kw'>begin</span>
-            <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>+=</span> <span class='lparen'>(</span><span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>-</span> <span class='id identifier rubyid_day_marker'>day_marker</span><span class='rparen'>)</span> <span class='op'>*</span> <span class='id identifier rubyid_find_rate'><span class='object_link'><a href="#find_rate-instance_method" title="#find_rate (method)">find_rate</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_sc'>sc</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_finish'>finish</span><span class='rparen'>)</span>
-          <span class='kw'>rescue</span> <span class='const'>ArgumentError</span> <span class='op'>=&gt;</span> <span class='id identifier rubyid_e'>e</span>
-            <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_warn'>warn</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>standing charge: </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_e'>e</span><span class='period'>.</span><span class='id identifier rubyid_message'>message</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
-          <span class='kw'>end</span>
-          <span class='id identifier rubyid_day_marker'>day_marker</span> <span class='op'>=</span> <span class='id identifier rubyid_day_number'>day_number</span>
+    <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_info'>info</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>Comparing to tariff </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_tariff_code'>tariff_code</span><span class='embexpr_end'>}</span><span class='tstring_content'>...</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
+    <span class='id identifier rubyid_bucket_marker'>bucket_marker</span> <span class='op'>=</span> <span class='int'>0</span>
+    <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>=</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>=</span> <span class='int'>0</span>
+    <span class='id identifier rubyid_day_marker'>day_marker</span> <span class='op'>=</span> <span class='int'>0</span>
+    <span class='id identifier rubyid_consumption'>consumption</span><span class='period'>.</span><span class='id identifier rubyid_each'>each</span> <span class='kw'>do</span> <span class='op'>|</span><span class='id identifier rubyid_slot'>slot</span><span class='op'>|</span>
+      <span class='id identifier rubyid_start'>start</span> <span class='op'>=</span> <span class='id identifier rubyid_mktime_from'><span class='object_link'><a href="#mktime_from-instance_method" title="#mktime_from (method)">mktime_from</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>interval_start</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='rparen'>)</span>
+      <span class='id identifier rubyid_finish'>finish</span> <span class='op'>=</span> <span class='id identifier rubyid_mktime_to'><span class='object_link'><a href="#mktime_to-instance_method" title="#mktime_to (method)">mktime_to</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>interval_end</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='rparen'>)</span>
+      <span class='id identifier rubyid_usage'>usage</span> <span class='op'>=</span> <span class='id identifier rubyid_slot'>slot</span><span class='lbracket'>[</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>consumption</span><span class='tstring_end'>&#39;</span></span><span class='rbracket'>]</span><span class='period'>.</span><span class='id identifier rubyid_to_f'>to_f</span>
+      <span class='id identifier rubyid_bucket_number'>bucket_number</span> <span class='op'>=</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='id identifier rubyid_period_length'>period_length</span>
+      <span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>=</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='int'>1</span><span class='period'>.</span><span class='id identifier rubyid_day'>day</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span>
+      <span class='kw'>if</span> <span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>&gt;</span> <span class='id identifier rubyid_day_marker'>day_marker</span>
+        <span class='kw'>begin</span>
+          <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>+=</span> <span class='lparen'>(</span><span class='id identifier rubyid_day_number'>day_number</span> <span class='op'>-</span> <span class='id identifier rubyid_day_marker'>day_marker</span><span class='rparen'>)</span> <span class='op'>*</span> <span class='id identifier rubyid_find_rate'><span class='object_link'><a href="#find_rate-instance_method" title="#find_rate (method)">find_rate</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_sc'>sc</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_finish'>finish</span><span class='rparen'>)</span>
+        <span class='kw'>rescue</span> <span class='const'>ArgumentError</span> <span class='op'>=&gt;</span> <span class='id identifier rubyid_e'>e</span>
+          <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_warn'>warn</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>standing charge: </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_e'>e</span><span class='period'>.</span><span class='id identifier rubyid_message'>message</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
         <span class='kw'>end</span>
+        <span class='id identifier rubyid_day_marker'>day_marker</span> <span class='op'>=</span> <span class='id identifier rubyid_day_number'>day_number</span>
+      <span class='kw'>end</span>
 
-        <span class='comment'># End of period:
-</span>        <span class='kw'>if</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span> <span class='op'>&gt;</span> <span class='id identifier rubyid_bucket_marker'>bucket_marker</span>
-          <span class='id identifier rubyid_report_bucket'><span class='object_link'><a href="#report_bucket-instance_method" title="#report_bucket (method)">report_bucket</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_bucket'>bucket</span><span class='comma'>,</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span><span class='comma'>,</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='lparen'>(</span><span class='id identifier rubyid_finish'>finish</span> <span class='op'>-</span> <span class='id identifier rubyid_start'>start</span><span class='rparen'>)</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span><span class='rparen'>)</span>
-          <span class='id identifier rubyid_total_sc'>total_sc</span> <span class='op'>+=</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span>
-          <span class='id identifier rubyid_total_tc'>total_tc</span> <span class='op'>+=</span> <span class='id identifier rubyid_bucket'>bucket</span>
-          <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>=</span> <span class='int'>0</span>
-          <span class='id identifier rubyid_bucket_marker'>bucket_marker</span> <span class='op'>=</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span>
-          <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>=</span> <span class='int'>0</span>
-        <span class='kw'>end</span>
-        <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>+=</span> <span class='id identifier rubyid_usage'>usage</span> <span class='op'>*</span> <span class='id identifier rubyid_find_rate'><span class='object_link'><a href="#find_rate-instance_method" title="#find_rate (method)">find_rate</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_sur'>sur</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_finish'>finish</span><span class='rparen'>)</span>
-      <span class='kw'>rescue</span> <span class='const'>ArgumentError</span> <span class='op'>=&gt;</span> <span class='id identifier rubyid_e'>e</span>
-        <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_warn'>warn</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>tariff charge: </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_e'>e</span><span class='period'>.</span><span class='id identifier rubyid_message'>message</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
-        <span class='gvar'>$missing_rate</span> <span class='op'>+=</span> <span class='int'>1</span>
-        <span class='id identifier rubyid_abort'>abort</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>too many missing rates</span><span class='tstring_end'>&#39;</span></span><span class='rparen'>)</span> <span class='kw'>if</span> <span class='gvar'>$missing_rate</span> <span class='op'>&gt;</span> <span class='int'>5</span>
+      <span class='comment'># End of period:
+</span>      <span class='kw'>if</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span> <span class='op'>&gt;</span> <span class='id identifier rubyid_bucket_marker'>bucket_marker</span>
+        <span class='id identifier rubyid_report_bucket'><span class='object_link'><a href="#report_bucket-instance_method" title="#report_bucket (method)">report_bucket</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_bucket'>bucket</span><span class='comma'>,</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span><span class='comma'>,</span> <span class='lparen'>(</span><span class='id identifier rubyid_start'>start</span> <span class='op'>-</span> <span class='id identifier rubyid_from_time'>from_time</span><span class='rparen'>)</span><span class='period'>.</span><span class='id identifier rubyid_to_i'>to_i</span> <span class='op'>/</span> <span class='lparen'>(</span><span class='id identifier rubyid_finish'>finish</span> <span class='op'>-</span> <span class='id identifier rubyid_start'>start</span><span class='rparen'>)</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span><span class='rparen'>)</span>
+        <span class='id identifier rubyid_total_sc'>total_sc</span> <span class='op'>+=</span> <span class='id identifier rubyid_standing_charge'>standing_charge</span>
+        <span class='id identifier rubyid_total_tc'>total_tc</span> <span class='op'>+=</span> <span class='id identifier rubyid_bucket'>bucket</span>
+        <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>=</span> <span class='int'>0</span>
+        <span class='id identifier rubyid_bucket_marker'>bucket_marker</span> <span class='op'>=</span> <span class='id identifier rubyid_bucket_number'>bucket_number</span>
+        <span class='id identifier rubyid_standing_charge'>standing_charge</span> <span class='op'>=</span> <span class='int'>0</span>
       <span class='kw'>end</span>
+      <span class='id identifier rubyid_bucket'>bucket</span> <span class='op'>+=</span> <span class='id identifier rubyid_usage'>usage</span> <span class='op'>*</span> <span class='id identifier rubyid_find_rate'><span class='object_link'><a href="#find_rate-instance_method" title="#find_rate (method)">find_rate</a></span></span><span class='lparen'>(</span><span class='id identifier rubyid_tariff'>tariff</span><span class='period'>.</span><span class='id identifier rubyid_sur'>sur</span><span class='comma'>,</span> <span class='id identifier rubyid_start'>start</span><span class='comma'>,</span> <span class='id identifier rubyid_finish'>finish</span><span class='rparen'>)</span>
+    <span class='kw'>rescue</span> <span class='const'>ArgumentError</span> <span class='op'>=&gt;</span> <span class='id identifier rubyid_e'>e</span>
+      <span class='gvar'>$logger</span><span class='period'>.</span><span class='id identifier rubyid_warn'>warn</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&quot;</span><span class='tstring_content'>tariff charge: </span><span class='embexpr_beg'>#{</span><span class='id identifier rubyid_e'>e</span><span class='period'>.</span><span class='id identifier rubyid_message'>message</span><span class='embexpr_end'>}</span><span class='tstring_end'>&quot;</span></span><span class='rparen'>)</span>
+      <span class='gvar'>$missing_rate</span> <span class='op'>+=</span> <span class='int'>1</span>
+      <span class='id identifier rubyid_abort'>abort</span><span class='lparen'>(</span><span class='tstring'><span class='tstring_beg'>&#39;</span><span class='tstring_content'>too many missing rates</span><span class='tstring_end'>&#39;</span></span><span class='rparen'>)</span> <span class='kw'>if</span> <span class='gvar'>$missing_rate</span> <span class='op'>&gt;</span> <span class='int'>5</span>
     <span class='kw'>end</span>
   <span class='kw'>end</span>
   <span class='lbracket'>[</span><span class='id identifier rubyid_total_sc'>total_sc</span><span class='comma'>,</span> <span class='id identifier rubyid_total_tc'>total_tc</span><span class='rbracket'>]</span>
@@ -852,12 +938,12 @@
       <pre class="lines">
 
 
-251
-252
-253</pre>
+255
+256
+257</pre>
     </td>
     <td>
-      <pre class="code"><span class="info file"># File 'octoload.rb', line 251</span>
+      <pre class="code"><span class="info file"># File 'octoload.rb', line 255</span>
 
 <span class='kw'>def</span> <span class='id identifier rubyid_pence2pounds'>pence2pounds</span><span class='lparen'>(</span><span class='id identifier rubyid_p'>p</span><span class='rparen'>)</span>
   <span class='lparen'>(</span><span class='id identifier rubyid_p'>p</span> <span class='op'>+</span> <span class='float'>0.0</span><span class='rparen'>)</span> <span class='op'>/</span> <span class='float'>100.0</span>
@@ -1042,7 +1128,7 @@
 </div>
 
       <div id="footer">
-  Generated on Sun Dec 13 20:08:37 2020 by
+  Generated on Sun Dec 13 21:54:25 2020 by
   <a href="http://yardoc.org" title="Yay! A Ruby Documentation Tool" target="_parent">yard</a>
   0.9.25 (ruby-2.7.1).
 </div>
