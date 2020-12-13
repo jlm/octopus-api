@@ -14,9 +14,10 @@ class OctAPI
   attr_reader :postcode
   attr_accessor :logger
 
+  # Sets up a client instance ready to query the Octopus Energy API (https://developer.octopus.energy/docs/api/).
   # @param [String] key Octopus API key
   # @param [Logger] logger A previously-created Logger object
-  # @param [Hash] options Use this to pass +verify_ssl: OpenSSL::SSL::VERIFY_NONE+
+  # @param [Hash] options Use this to pass +verify_ssl: OpenSSL::SSL::VERIFY_NONE+ for debugging with https://www.charlesproxy.com/
   # @return [OctAPI] A newly-created OctAPI instance
   def initialize(key, logger = nil, options = {})
     @key = key
@@ -63,7 +64,7 @@ class OctAPI
   TARIFF_TYPES = [ :sr_elec, :dr_elec, :sr_gas ]
   TARIFF_TYPE_NAMES = { sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
   ######
-  # A class method to give the tariff type name of a tariff class
+  # A class method to give the tariff type name of a tariff type
   # @param [TARIFF_TYPES] tariff_type
   # @return [String] the name of the tariff type
   def self.tariff_type_name(tariff_type)
