@@ -148,7 +148,15 @@ def find_rate(ratelist, start, finish)
   #abort('fatal error')
 end
 
-def do_product(product, from_time, period_length, consumption, opts)
+# Given a Product, calculate the charges over a period of time based on provided consumption records.
+# Consumption is specified as array of tuples +:interval_start, :interval_end, :consumption+ as returned by +#consumption+
+# and specified in https://developer.octopus.energy/docs/api/#consumption.
+# @param [Product] product
+# @param [Time] from_time start comparison at this time
+# @param [ActiveSupport::Duration] period_length length of period in seconds or as a Duration
+# @param [Array<Hash{String=>Float,String}>] consumption Consumption records for the period
+# @return [Array<Integer>] array with two integers, representing the total standing charge and the total tariff charge for the period, in pence
+def calc_charges(product, from_time, period_length, consumption)
   # Local variables:
   # @type [Time] from app-level period start
   # @type [Time] to app-level period end
@@ -156,53 +164,49 @@ def do_product(product, from_time, period_length, consumption, opts)
   # @type [Time] finish consumption slot end
   # @type [Time] valid_from tariff slot start
   # @type [Time] valid_to tariff slot end
-  # @type [Product] product
   $logger.warn('specify a postcode to allow retrieval of tariff charges') if product.region.nil?
-  print_product(product.product_code, product) if opts[:products]
   total_tc = total_sc = 0
-  if opts[:compare]
-    unless product.tariffs[product.region]
-      raise ArgumentError, "skipping product #{product.product_code} as it has no tariffs for region #{product.region}"
+  unless product.tariffs[product.region]
+    raise ArgumentError, "skipping product #{product.product_code} as it has no tariffs for region #{product.region}"
+  end
+  product.tariffs[product.region].each do |tariff|
+    if tariff.tariff_type != :sr_elec
+      $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
+      next
     end
-    product.tariffs[product.region].each do |tariff|
-      if tariff.tariff_type != :sr_elec
-        $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
-        next
-      end
-      $logger.info("Comparing to tariff #{tariff.tariff_code}...")
-      bucket_marker = 0
-      bucket = standing_charge = 0
-      day_marker = 0
-      consumption.each do |slot|
-        start = mktime_from(slot['interval_start'])
-        finish = mktime_to(slot['interval_end'])
-        usage = slot['consumption'].to_f
-        bucket_number = (start - from_time).to_i / period_length
-        day_number = (start - from_time).to_i / 1.day.to_i
-        if day_number > day_marker
-          begin
-            standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
-          rescue ArgumentError => e
-            $logger.warn("standing charge: #{e.message}")
-          end
-          day_marker = day_number
+    $logger.info("Comparing to tariff #{tariff.tariff_code}...")
+    bucket_marker = 0
+    bucket = standing_charge = 0
+    day_marker = 0
+    consumption.each do |slot|
+      start = mktime_from(slot['interval_start'])
+      finish = mktime_to(slot['interval_end'])
+      usage = slot['consumption'].to_f
+      bucket_number = (start - from_time).to_i / period_length
+      day_number = (start - from_time).to_i / 1.day.to_i
+      if day_number > day_marker
+        begin
+          standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
+        rescue ArgumentError => e
+          $logger.warn("standing charge: #{e.message}")
         end
+        day_marker = day_number
+      end
 
-        # End of period:
-        if bucket_number > bucket_marker
-          report_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
-          total_sc += standing_charge
-          total_tc += bucket
-          bucket = 0
-          bucket_marker = bucket_number
-          standing_charge = 0
-        end
-        bucket += usage * find_rate(tariff.sur, start, finish)
-      rescue ArgumentError => e
-        $logger.warn("tariff charge: #{e.message}")
-        $missing_rate += 1
-        abort('too many missing rates') if $missing_rate > 5
+      # End of period:
+      if bucket_number > bucket_marker
+        report_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
+        total_sc += standing_charge
+        total_tc += bucket
+        bucket = 0
+        bucket_marker = bucket_number
+        standing_charge = 0
       end
+      bucket += usage * find_rate(tariff.sur, start, finish)
+    rescue ArgumentError => e
+      $logger.warn("tariff charge: #{e.message}")
+      $missing_rate += 1
+      abort('too many missing rates') if $missing_rate > 5
     end
   end
   [total_sc, total_tc]
@@ -318,6 +322,7 @@ begin
     from_time = nil
     abort('must specify --from <fromtime> with --compare') if opts[:compare]
   end
+
   if opts[:to]
     to_time = mktime_to(opts[:to]) || abort('--to must specify a valid date/time')
     to = to_time.iso8601
@@ -371,7 +376,7 @@ begin
     pd_params[:period_to] = to if to
     comparator = octo.product(opts[:compare], pd_params)
     puts "Comparator tariff: #{opts[:compare]}" unless opts[:json]
-    comparison[opts['compare']] = do_product(comparator, from_time, bucket_length, consumption, opts)
+    comparison[opts['compare']] = calc_charges(comparator, from_time, bucket_length, consumption)
   end
 
   if opts[:products] || opts[:compare]
@@ -385,11 +390,22 @@ begin
       pd_params[:tariffs_active_at] = at if at
       pd_params[:period_from] = from if from
       pd_params[:period_to] = to if to
+      product = octo.product(prod['code'], pd_params)
 
-      sc, tc = do_product(octo.product(prod['code'], pd_params), from_time, bucket_length, consumption, opts)
-      comparison[prod['code']] = [sc, tc] unless sc == 0 && tc == 0
-    rescue ArgumentError => e
-      $logger.warn(e.message)
+      if opts[:products]
+        print_product(prod['code'], product)
+      end
+
+      if opts[:compare]
+        abort('must specify --from <fromtime> with --compare') unless from_time    # for RuboCop
+        abort('no consumption data available') unless consumption    # for RuboCop
+        begin
+          sc, tc = calc_charges(product, from_time, bucket_length, consumption)
+          comparison[prod['code']] = [sc, tc] unless sc == 0 && tc == 0
+        rescue ArgumentError => e
+          $logger.warn(e.message)
+        end
+      end
     end
   end
 
