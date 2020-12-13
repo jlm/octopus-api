@@ -320,7 +320,6 @@ begin
   else
     from = nil
     from_time = nil
-    abort('must specify --from <fromtime> with --compare') if opts[:compare]
   end
 
   if opts[:to]
@@ -359,7 +358,7 @@ begin
     params = {}
     params[:period_from] = from if from
     params[:period_to] = to if to
-    consumption = octo.consumption(config['mpan'], config['serial'], params) || abort('no consumption data available')
+    consumption = octo.consumption(config['mpan'], config['serial'], params)
 
     output_consumption_as_csv(csv, consumption) if csv
   end
@@ -370,6 +369,8 @@ begin
   comparison = {}
 
   if opts[:compare]
+    abort('must specify --from <fromtime> with --compare') unless from_time
+    abort('no consumption data available') unless consumption
     pd_params = {}
     pd_params[:tariffs_active_at] = at if at
     pd_params[:period_from] = from if from
