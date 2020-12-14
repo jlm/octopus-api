@@ -25,25 +25,27 @@ class OctAPI
     @api = RestClient::Resource.new('https://api.octopus.energy/v1/', options.merge({ user: @key, password: '', }))
   end
 
-   ######
   # Set the postcode, and derive the grid supply point list from it.
-  ######
+  # @param [String] postcode Postcode of the supply point, used to select available products and localise tariff charges
+  # @return [String] the same postcode
   def postcode=(postcode)
     @postcode = postcode
     gsps = postcode && gsps(postcode)
-    if gsps && (gsps['count'] == 1)
-      @pes_name = gsps['results'].first['group_id']
-      #noinspection RubyNilAnalysis
+    if gsps && (gsps.length == 1)
+      @pes_name = gsps.first
       @logger.info("postcode <#{postcode}>: grid supply point PES name: #{@pes_name}") if @logger
     else
       @logger.warn("postcode <#{postcode}>: grid supply point not uniquely found") if @logger
     end
+    postcode
   end
 
-  #noinspection SpellCheckingInspection
+  # Fetch the Grid Supply Point (aka PES name) for a supplied postcode, from the API. If no postcode is specified, fetch all of them,
+  # @param [String] postcode
+  # @return [Array<String>,nil] an array of PES names, e.g., +["_F"]+
   def gsps(postcode)
-    params = { postcode: postcode }
-    octofetch('industry/grid-supply-points/', params)
+    r = octofetch_array('industry/grid-supply-points/', { postcode: postcode })
+    r && r.map{|p| p['group_id']}
   end
 
   #noinspection SpellCheckingInspection
@@ -146,12 +148,10 @@ class OctAPI
     end
     # If a period was specified using :period_from, and a region has been selected,
     # then retrieve and include a tariff charge "history" (which could extend into the future too).
-    tc_opts = {}
-    tc_opts[:period_from] = params[:period_from]
-    tc_opts[:period_to] = params[:period_to]
     if params[:period_from] && product.region && !product.tariffs.empty? && product.tariffs[product.region]
       product.tariffs[product.region].each do |ts|
-        scs, rates, night_rates = tariff_charges(product.product_code, ts.tariff_code, ts.tariff_type, tc_opts)
+        scs, rates, night_rates = tariff_charges(product.product_code, ts.tariff_code, ts.tariff_type,
+                                                 { period_from: params[:period_from], period_to: params[:period_to] })
         ts.sc = scs
         case ts.tariff_type
         when :sr_elec
@@ -177,6 +177,7 @@ class OctAPI
       option_hash[:params] = params if params
       resp = @api[spec].get option_hash
     rescue => e
+      @logger.fatal("octopus-api: #{spec}: " + e.message) if @logger
       abort("octopus-api: #{spec}: " + e.message)
     end
     JSON.parse(resp)
