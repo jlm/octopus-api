@@ -126,8 +126,8 @@ end
 
 # Find a rate applicable during an interval, in an array of intervals
 # @param [Array<Hash>] ratelist Array of (valid_from, valid_to, value) tuples
-# @param [Object] start start time of interval to search for
-# @param [Object] finish finish time of interval to search for
+# @param [Time] start start time of interval to search for
+# @param [Time] finish finish time of interval to search for
 # @return [Float] the rate found
 def find_rate(ratelist, start, finish)
   ratelist.each do |tslot|
