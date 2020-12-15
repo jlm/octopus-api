@@ -58,43 +58,6 @@ rescue => e
   END_TIME
 end
 
-def print_tariff_summary(ts)
-  tt = OctAPI.tariff_type_name(ts.tariff_type)
-  case ts.tariff_type
-  when :sr_elec, :sr_gas
-      price = "Standard unit rate: #{ts.sur_incvat} p/kWh"
-  when :dr_elec
-    price = "Day unit rate: #{ts.dur_incvat} p/kWh, Night unit rate: #{ts.nur_incvat} p/kWh"
-  else
-    raise ArgumentError, 'unknown tariff type'
-  end
-  puts "  + #{ts.tariff_code}: #{tt} #{ts.payment_model}: Standing charge: #{ts.sc_incvat} p/day, #{price}"
-  ts.sc&.reverse_each  { |rate| print_tariff_charge(rate, 'Standard charge', 'p/day') }
-  ts.sur&.reverse_each { |rate| print_tariff_charge(rate, 'Standard unit rate') }
-  ts.dur&.reverse_each { |rate| print_tariff_charge(rate, 'Day unit rate') }
-  ts.nur&.reverse_each { |rate| print_tariff_charge(rate, 'Night unit rate') }
-end
-
-def print_product(code, product)
-  puts "Product #{code} \"#{product.display_name}\" tariffs active at #{product.tariffs_active_at}"
-  #puts "Matching tariffs:"
-  if product.tariffs.empty?
-    puts "  + No applicable tariffs"
-    return
-  end
-  if product.region
-    product.tariffs[product.region].each(&method(:print_tariff_summary))
-  else
-    product.tariffs.each do |_region, tslist|
-      tslist.each(&method(:print_tariff_summary))
-    end
-  end
-end
-
-def print_tariff_charge(rate, rate_name = '', rate_unit = 'p/kWh')
-  puts "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}"
-end
-
 # Output the consumption data to a CSV file, if selected
 # The header row says "Date," and then 00:00,00:30,01:00,01:30 etc.
 # @param [CSV] csv already-opened CSV object to write to
@@ -395,7 +358,6 @@ begin
 
       if opts[:products]
         puts product.to_s(opts['verbose'])
-        #print_product(prod['code'], product)
       end
 
       if opts[:compare]
@@ -440,6 +402,5 @@ begin
     pd_params[:period_to] = to if to
     p = octo.product(opts[:product], pd_params)
     puts p.to_s(opts['verbose'])
-    #print_product(opts[:product], p)
   end
 end
