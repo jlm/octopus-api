@@ -48,7 +48,12 @@ class OctAPI
     r && r.map{|p| p['group_id']}
   end
 
-  #noinspection SpellCheckingInspection
+  # Fetch the Grid Supply Point (aka PES name) and profile class of a given meter point.
+  # @param [String] mpan the Meter Point Administration Number (MPAN, aka Supply Number or S-Number)
+  # @return [Hash{String=>(String,Integer)}] A hash with three elements:
+  #   :gsp the Grid Supply Point name (e.g. "_F")
+  #   :mpan the MPAN as supplied
+  #   :profile_class whoever knows what this is?  It's an integer, such as 1
   def emps(mpan)
     octofetch("electricity-meter-points/%s" % mpan)
   end
@@ -94,10 +99,56 @@ class OctAPI
 
   Product = Struct.new(:product_code, :tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
                        :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
-                       :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true)
+                       :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true) do
+    def to_s(verbose = nil)
+      str = "Product #{self.product_code} \"#{self.display_name}\" tariffs active at #{self.tariffs_active_at}\n"
+      #puts "Matching tariffs:"
+      if self.tariffs.empty?
+        str << "  + No applicable tariffs\n"
+        return
+      end
+      if verbose
+        if self.region
+          self.tariffs[self.region].each { |ts| str << ts.to_s(verbose) }
+        else
+          self.tariffs.each do |_region, tslist|
+            tslist.each { |ts| str << ts.to_s(verbose) }
+          end
+        end
+      end
+      str
+    end
+  end
+
   TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
                              :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat, :sc, :sur, :dur, :nur,
-                             keyword_init: true)
+                             keyword_init: true) do
+    def to_s(verbose = nil)
+      tt = OctAPI.tariff_type_name(self.tariff_type)
+      case self.tariff_type
+      when :sr_elec, :sr_gas
+        price = "Standard unit rate: #{self.sur_incvat} p/kWh"
+      when :dr_elec
+        price = "Day unit rate: #{self.dur_incvat} p/kWh, Night unit rate: #{self.nur_incvat} p/kWh"
+      else
+        raise ArgumentError, 'unknown tariff type'
+      end
+      str = "  + #{self.tariff_code}: #{tt} #{self.payment_model}: Standing charge: #{self.sc_incvat} p/day, #{price}"
+      if verbose
+        self.sc&.reverse_each  { |rate| str << stringify_tariff_charge(rate, 'Standard charge', 'p/day') }
+        self.sur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Standard unit rate') }
+        self.dur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Day unit rate') }
+        self.nur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Night unit rate') }
+      end
+      str
+    end
+
+    private
+
+    def stringify_tariff_charge(rate, rate_name, rate_unit = '')
+      "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}\n"
+    end
+  end
 
   # Retrieve details of a product. If a period is specified with :period_from, then attach tariff histories for each tariff.
   # @param [String] code the Octopus product code

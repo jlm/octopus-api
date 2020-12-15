@@ -394,7 +394,8 @@ begin
       product = octo.product(prod['code'], pd_params)
 
       if opts[:products]
-        print_product(prod['code'], product)
+        puts product.to_s(opts['verbose'])
+        #print_product(prod['code'], product)
       end
 
       if opts[:compare]
@@ -438,6 +439,7 @@ begin
     pd_params[:period_from] = from if from
     pd_params[:period_to] = to if to
     p = octo.product(opts[:product], pd_params)
-    print_product(opts[:product], p)
+    puts p.to_s(opts['verbose'])
+    #print_product(opts[:product], p)
   end
 end
