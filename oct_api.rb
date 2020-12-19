@@ -70,7 +70,7 @@ class OctAPI
 
   TARIFF_TYPES = [ :sr_elec, :dr_elec, :sr_gas ]
   TARIFF_TYPE_NAMES = { sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
-  ######
+
   # A class method to give the tariff type name of a tariff type
   # @param [TARIFF_TYPES] tariff_type
   # @return [String] the name of the tariff type
