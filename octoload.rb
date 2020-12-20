@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+
 ####
 # Copyright 2020-2020 John Messenger
 #
@@ -28,13 +30,14 @@ require 'active_support/core_ext/numeric/time'
 
 require './oct_api'
 
+# Hack the Time class to add a 'beginning-of-day' method
 class Time
   def bod
-    arr = self.to_a
+    arr = self
     arr[0] = 0
     arr[1] = 0
     arr[2] = 0
-    Time.local *arr
+    Time.local(*arr)
   end
 end
 END_TIME = Time.parse('2116-02-19')
@@ -42,7 +45,7 @@ END_TIME = Time.parse('2116-02-19')
 def mktime_from(timestr)
   Time.parse(timestr).localtime(0)
 rescue => _e
-  #$logger.debug("mktime_from: parsing '#{timestr.inspect}' gives #{e.to_s}")
+  # $logger.debug("mktime_from: parsing '#{timestr.inspect}' gives #{e}")
   Time.at(0)
 end
 
@@ -53,7 +56,7 @@ def mktime_to(timestr)
     Time.parse(timestr).localtime(0)
   end
 rescue => e
-  $logger.warn("mktime_to: parsing '#{timestr.inspect}' gives #{e.to_s}")
+  $logger.warn("mktime_to: parsing '#{timestr.inspect}' gives #{e}")
   END_TIME
 end
 
@@ -64,26 +67,20 @@ end
 # @return [void]
 def output_consumption_as_csv(csv, results)
   row = ['Date']
-  48.times do |col|
-    row << Time.parse(results[col]['interval_start']).getlocal(0).strftime('%H:%M')
-  end
+  48.times { |col| row << Time.parse(results[col]['interval_start']).getlocal(0).strftime('%H:%M') }
   csv << row
-  ######
   # Each line in the table starts with YYYY-MM-DD and then real numbers giving consumption in kWh per slot
-  ######
-  (0..(results.length / 48 - 1)).each { |rowno|
+  (0..(results.length / 48 - 1)).each do |rowno|
     row = []
-    row << Time.parse(results[48 * rowno]['interval_start']).getlocal(0).strftime("%Y-%m-%d")
-    48.times do |col|
-      row << results[48 * rowno + col]['consumption'].to_f
-    end
+    row << Time.parse(results[48 * rowno]['interval_start']).getlocal(0).strftime('%Y-%m-%d')
+    48.times { |col| row << results[48 * rowno + col]['consumption'].to_f }
     csv << row
-  }
+  end
   csv.close
 end
 
 def report_bucket(bucket, bucket_no, iter, start, sc)
-  $logger.debug("#{start.to_s}: bucket #{bucket_no} full after #{iter} iterations; sc: #{sc}; cost: #{bucket}")
+  $logger.debug("#{start}: bucket #{bucket_no} full after #{iter} iterations; sc: #{sc}; cost: #{bucket}")
 end
 
 # Find a rate applicable during an interval, in an array of intervals
@@ -95,29 +92,23 @@ def find_rate(ratelist, start, finish)
   ratelist.each do |tslot|
     valid_from = mktime_from(tslot['valid_from'])
     valid_to = mktime_to(tslot['valid_to'])
-    if start.between?(valid_from, valid_to)
-      # $logger.debug("cons slot start #{start.to_s}: found rate slot #{valid_from.to_s} to #{valid_to.to_s}")
-      if finish.between?(valid_from, valid_to)
-        # $logger.debug("...and it includes the finish time too: #{finish.to_s}")
-        return tslot['value_inc_vat'].to_f
-      else
-        $logger.warn("finish time of consumption time slot was after end of tariff validity slot")
-        #abort('fatal error')
-      end
-    end
+    next unless start.between?(valid_from, valid_to)
+
+    return tslot['value_inc_vat'].to_f if finish.between?(valid_from, valid_to)
+
+    $logger.warn('finish time of consumption time slot was after end of tariff validity slot')
   end
-  raise ArgumentError, "no matching rate found for interval #{start.to_s} to #{finish.to_s}"
-  #abort('fatal error')
+  raise ArgumentError, "no matching rate found for interval #{start} to #{finish}"
 end
 
 # Given a Product, calculate the charges over a period of time based on provided consumption records.
-# Consumption is specified as array of tuples +:interval_start, :interval_end, :consumption+ as returned by +#consumption+
-# and specified in https://developer.octopus.energy/docs/api/#consumption.
+# Consumption is specified as array of tuples +:interval_start, :interval_end, :consumption+ as returned
+# by +#consumption+ and specified in https://developer.octopus.energy/docs/api/#consumption.
 # @param [OctAPI::Product] product
 # @param [Time] from_time start comparison at this time
 # @param [ActiveSupport::Duration] period_length length of period in seconds or as a Duration
 # @param [Array<Hash{String=>Float,String}>] consumption Consumption records for the period
-# @return [Array<Integer>] array with two integers, representing the total standing charge and the total tariff charge for the period, in pence
+# @return [Array<Integer>] array with two integers: total standing charge and total tariff charge for period, in pence
 def calc_charges(product, from_time, period_length, consumption)
   # Local variables:
   # @type [Time] from app-level period start
@@ -134,20 +125,18 @@ def calc_charges(product, from_time, period_length, consumption)
 
   product.tariffs[product.region].each do |tariff|
     if tariff.tariff_type != :sr_elec
-      $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
+      $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type}")
       next
     end
     $logger.info("Comparing to tariff #{tariff.tariff_code}...")
-    bucket_marker = 0
-    bucket = standing_charge = 0
-    day_marker = 0
+    bucket_marker = bucket = standing_charge = day_marker = 0
     consumption.each do |slot|
       start = mktime_from(slot['interval_start'])
       finish = mktime_to(slot['interval_end'])
       usage = slot['consumption'].to_f
-      bucket_number = (start - from_time).to_i / period_length
-      day_number = (start - from_time).to_i / 1.day.to_i
-      if day_number > day_marker
+
+      # End of day
+      if (day_number = (start - from_time).to_i / 1.day.to_i) > day_marker
         begin
           standing_charge += (day_number - day_marker) * find_rate(tariff.sc, start, finish)
         rescue ArgumentError => e
@@ -157,13 +146,11 @@ def calc_charges(product, from_time, period_length, consumption)
       end
 
       # End of period:
-      if bucket_number > bucket_marker
+      if (bucket_number = (start - from_time).to_i / period_length) > bucket_marker
         report_bucket(bucket, bucket_number, (start - from_time).to_i / (finish - start), start, standing_charge)
-        total_sc += standing_charge
-        total_tc += bucket
-        bucket = 0
+        total_sc += standing_charge; standing_charge = 0
+        total_tc += bucket; bucket = 0
         bucket_marker = bucket_number
-        standing_charge = 0
       end
       bucket += usage * find_rate(tariff.sur, start, finish)
     rescue ArgumentError => e
@@ -181,11 +168,11 @@ TariffComparison = Struct.new(:code, :sc, :tc, :total, :saving, :comparator?, :k
   end
 
   def to_s
-    sc_str = "%5.2f" % sc
-    tc_str = "%5.2f" % tc
-    total_str = "£%5.2f" % total
-    saving_str = "£%5.2f" % saving
-    code_str = "%28s" % (comparator? ? "*** " + code : code)
+    sc_str = '%5.2f' % sc
+    tc_str = '%5.2f' % tc
+    total_str = '£%5.2f' % total
+    saving_str = '£%5.2f' % saving
+    code_str = '%28s' % (comparator? ? '*** ' + code : code)
     "#{code_str}: Standing charges: #{sc_str}, tariff charges #{tc_str}; total #{total_str}, saving: #{saving_str}"
   end
 end
@@ -202,7 +189,7 @@ Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, 
   end
 
   def to_s(verbose = nil)
-    result = ''
+    result = String.new ''
     result << "Period: #{period_start.strftime('%Y-%m-%d')}"
     result << "..#{period_end.strftime('%Y-%m-%d')}" if period_end
     result << " Comparator: #{comparator.code} "
@@ -262,7 +249,7 @@ begin
   #
   rest_client_options = {}
   if $_debug
-    RestClient.proxy = "http://localhost:8888"
+    RestClient.proxy = 'http://localhost:8888'
     $logger.debug("Using HTTP proxy #{RestClient.proxy}")
     rest_client_options = { verify_ssl: OpenSSL::SSL::VERIFY_NONE }
   end
@@ -297,7 +284,7 @@ begin
   brand = config['brand']
   brand = opts[:brand] if opts[:brand]
 
-  $logger.debug("from: #{from.to_s}; to: #{to.to_s}; at: #{at.to_s}")
+  $logger.debug("from: #{from}; to: #{to}; at: #{at}")
 
   octo = OctAPI.new(config['key'], $logger, rest_client_options)
   octo.postcode = opts[:postcode]     # This also sets the PES name
