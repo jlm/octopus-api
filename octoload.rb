@@ -114,7 +114,7 @@ end
 # Given a Product, calculate the charges over a period of time based on provided consumption records.
 # Consumption is specified as array of tuples +:interval_start, :interval_end, :consumption+ as returned by +#consumption+
 # and specified in https://developer.octopus.energy/docs/api/#consumption.
-# @param [Product] product
+# @param [OctAPI::Product] product
 # @param [Time] from_time start comparison at this time
 # @param [ActiveSupport::Duration] period_length length of period in seconds or as a Duration
 # @param [Array<Hash{String=>Float,String}>] consumption Consumption records for the period
@@ -132,6 +132,7 @@ def calc_charges(product, from_time, period_length, consumption)
   unless product.tariffs[product.region]
     raise ArgumentError, "skipping product #{product.product_code} as it has no tariffs for region #{product.region}"
   end
+
   product.tariffs[product.region].each do |tariff|
     if tariff.tariff_type != :sr_elec
       $logger.debug("skipping tariff #{tariff.tariff_code} of type #{tariff.tariff_type.to_s}")
@@ -289,7 +290,7 @@ begin
     to_time = mktime_to(opts[:to]) || abort('--to must specify a valid date/time')
     to = to_time.iso8601
   else
-    to = nil
+    to = to_time = nil
   end
   at = opts[:at] ? Time.parse(opts[:at]).iso8601 : from
   bucket_length = eval(config['period'] || '1.week')
@@ -379,6 +380,7 @@ begin
     ranked = comparison.sort{|a,b| (a[1][0]+a[1][1]) <=> (b[1][0]+b[1][1])}.reverse
     comparison_record = Comparison.new(
       :period_start => from_time,
+      :period_end => to_time ? to_time : from_time + bucket_length,
       :comparator => TariffComparison.new(:code => opts[:compare], :sc => sc, :tc => tc, :total => comparator_total, :saving => 0, :comparator? => true),
       :alternatives => Array.new(ranked.length) do |i|
         code = ranked[i][0]
