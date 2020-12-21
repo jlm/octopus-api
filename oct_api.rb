@@ -38,7 +38,6 @@ class OctAPI
     else
       @logger&.warn("postcode <#{postcode}>: grid supply point not uniquely found")
     end
-    postcode
   end
 
   # Fetch the Grid Supply Point (aka PES name) for a supplied postcode, from the API. If no postcode is specified,
@@ -85,6 +84,7 @@ class OctAPI
                 :description, :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs,
                 { keyword_init: true }].freeze
   Product = Struct.new(*PRODPARAMS) do
+    # noinspection RubyResolve
     def initialize(product_code, prodhash, args)
       # Be aware that args will contain additional parameters such as :period_from
       # The slice discards the names of the API elements returned from Octopus which aren't in PRODPARAMS.
@@ -114,9 +114,12 @@ class OctAPI
       end
     end
 
+    # noinspection RubyResolve
     def to_s(verbose = nil)
+      # noinspection RubyResolve
       str = String.new "Product #{product_code} \"#{display_name}\" tariffs active at #{tariffs_active_at}\n"
       # puts "Matching tariffs:"
+      # noinspection ConvertOneChainedExprToSafeNavigation
       if tariffs && tariffs.empty?
         str << "  + No applicable tariffs\n"
         return
@@ -201,8 +204,10 @@ class OctAPI
   # @option params [Time] :period_from include tariff rate information from the time specified
   # @option params [Time] :period_to include tariff rate information up to the time specified (must also specify :period_from)
   # @return [Product] A new Product structure containing the retrieved product details
+  # noinspection RubyResolve
   def product(code, params = {})
     prodhash = octofetch("products/#{code}/", params)
+    # noinspection RubyNilAnalysis
     product = Product.new(code, prodhash, params.merge(region: @pes_name))
     _twit = 149
     # If a period was specified using :period_from, and a region has been selected,
