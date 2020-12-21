@@ -1,4 +1,5 @@
-#
+# frozen_string_literal: true
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,7 +23,7 @@ class OctAPI
   def initialize(key, logger = nil, options = {})
     @key = key
     @logger = logger
-    @api = RestClient::Resource.new('https://api.octopus.energy/v1/', options.merge({ user: @key, password: '', }))
+    @api = RestClient::Resource.new('https://api.octopus.energy/v1/', options.merge({ user: @key, password: '' }))
   end
 
   # Set the postcode, and derive the grid supply point list from it.
@@ -33,19 +34,20 @@ class OctAPI
     gsps = postcode && gsps(postcode)
     if gsps && (gsps.length == 1)
       @pes_name = gsps.first
-      @logger.info("postcode <#{postcode}>: grid supply point PES name: #{@pes_name}") if @logger
+      @logger&.info("postcode <#{postcode}>: grid supply point PES name: #{@pes_name}")
     else
-      @logger.warn("postcode <#{postcode}>: grid supply point not uniquely found") if @logger
+      @logger&.warn("postcode <#{postcode}>: grid supply point not uniquely found")
     end
     postcode
   end
 
-  # Fetch the Grid Supply Point (aka PES name) for a supplied postcode, from the API. If no postcode is specified, fetch all of them,
+  # Fetch the Grid Supply Point (aka PES name) for a supplied postcode, from the API. If no postcode is specified,
+  # fetch all of them,
   # @param [String] postcode
   # @return [Array<String>,nil] an array of PES names, e.g., +["_F"]+
   def gsps(postcode)
     r = octofetch_array('industry/grid-supply-points/', { postcode: postcode })
-    r && r.map{|p| p['group_id']}
+    r&.map { |p| p['group_id'] }
   end
 
   # Fetch the Grid Supply Point (aka PES name) and profile class of a given meter point.
@@ -55,21 +57,21 @@ class OctAPI
   #   :mpan the MPAN as supplied
   #   :profile_class whoever knows what this is?  It's an integer, such as 1
   def emps(mpan)
-    octofetch("electricity-meter-points/%s" % mpan)
+    octofetch("electricity-meter-points/#{mpan}")
   end
 
   def consumption(mpan, serial, opts = {})
-    params = { :page_size => (7*48).to_s, :order_by => 'period' }
+    params = { page_size: (7 * 48).to_s, order_by: 'period' }
     params.merge!(opts)
     octofetch_array("electricity-meter-points/#{mpan}/meters/#{serial}/consumption/", params)
   end
 
   def products(params = {})
-    octofetch_array("products/", params)
+    octofetch_array('products/', params)
   end
 
-  TARIFF_TYPES = [ :sr_elec, :dr_elec, :sr_gas ]
-  TARIFF_TYPE_NAMES = { sr_elec: "Electricity", dr_elec: "Economy-7", sr_gas: "Gas" }
+  TARIFF_TYPES = %i[sr_elec dr_elec sr_gas].freeze
+  TARIFF_TYPE_NAMES = { sr_elec: 'Electricity', dr_elec: 'Economy-7', sr_gas: 'Gas' }.freeze
 
   # A class method to give the tariff type name of a tariff type
   # @param [TARIFF_TYPES] tariff_type
@@ -78,56 +80,61 @@ class OctAPI
     TARIFF_TYPE_NAMES[tariff_type]
   end
 
-  PRODPARAMS = [:product_code, :tariffs_active_at, :is_variable, :available_from, :available_to, :is_business, :is_green, :is_prepay,
-                :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand, :description,
-                :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs, keyword_init: true]
+  PRODPARAMS = [:product_code, :tariffs_active_at, :is_variable, :available_from, :available_to, :is_business,
+                :is_green, :is_prepay, :is_restricted, :is_tracker, :full_name, :display_name, :term, :brand,
+                :description, :region, :sr_elec_tariffs, :dr_elec_tariffs, :sr_gas_tariffs, :tariffs,
+                { keyword_init: true }].freeze
   Product = Struct.new(*PRODPARAMS) do
     def initialize(product_code, prodhash, args)
       # Be aware that args will contain additional parameters such as :period_from
       # The slice discards the names of the API elements returned from Octopus which aren't in PRODPARAMS.
-      super(prodhash.merge(args.transform_keys{|k| k.to_s}).slice(*(PRODPARAMS.map{|e| e.to_s})))      # This will set all the initializers from the values fetched from the API (plus our local args).  That takes my breath away.
-      twit = 42
+      # This will set all the initializers from the values fetched from the API (plus our local args).  That takes my
+      # breath away.
+      super(prodhash.merge(args.transform_keys(&:to_s)).slice(*PRODPARAMS.map(&:to_s)))
+      _twit = 42
       self.product_code = product_code
-      self.tariffs_active_at = Time.parse(self.tariffs_active_at).getlocal(0)
-      self.available_from = Time.parse(self.available_from).getlocal(0) if self.available_from
-      self.available_to = Time.parse(self.available_to).getlocal(0) if self.available_to
-      twit = 6*9
-      # For each tariff type, for each region (designated by a PES name typically _A to _P derived from a postcode), extract
-      # the list of tariff summaries returned in the "product" API call, and combine them into a hash indexed by region.
-      # The tariff summaries are tagged with their tariff type, instead of being structured by it.
-      self.tariffs = prodhash['single_register_electricity_tariffs']&.each_with_object({}) do |(region,pmg), memohash|
+      self.tariffs_active_at = Time.parse(tariffs_active_at).getlocal(0)
+      self.available_from = Time.parse(available_from).getlocal(0) if available_from
+      self.available_to = Time.parse(available_to).getlocal(0) if available_to
+      _twit = 6 * 9
+      # For each tariff type, for each region (designated by a PES name typically _A to _P derived from a postcode),
+      # extract the list of tariff summaries returned in the "product" API call, and combine them into a hash indexed
+      # by region. The tariff summaries are tagged with their tariff type, instead of being structured by it.
+      self.tariffs = prodhash['single_register_electricity_tariffs']&.each_with_object({}) do |(region, pmg), memohash|
         memohash[region] ||= []
         memohash[region] += make_array_of_tariffs(pmg, :sr_elec)
       end
-      self.tariffs = prodhash['dual_register_electricity_tariffs']&.each_with_object(self.tariffs) do |(region,pmg), memohash|
+      self.tariffs = prodhash['dual_register_electricity_tariffs']&.each_with_object(tariffs) do |(region, pmg), memohash|
         memohash[region] ||= []
         memohash[region] += make_array_of_tariffs(pmg, :dr_elec)
       end
-      self.tariffs = prodhash['single_register_gas_tariffs']&.each_with_object(self.tariffs) do |(region,pmg), memohash|
+      self.tariffs = prodhash['single_register_gas_tariffs']&.each_with_object(tariffs) do |(region, pmg), memohash|
         memohash[region] ||= []
         memohash[region] += make_array_of_tariffs(pmg, :sr_gas)
       end
     end
 
     def to_s(verbose = nil)
-      str = "Product #{self.product_code} \"#{self.display_name}\" tariffs active at #{self.tariffs_active_at}\n"
-      #puts "Matching tariffs:"
-      if self.tariffs&.empty?
+      str = String.new "Product #{product_code} \"#{display_name}\" tariffs active at #{tariffs_active_at}\n"
+      # puts "Matching tariffs:"
+      if tariffs && tariffs.empty?
         str << "  + No applicable tariffs\n"
         return
       end
       if verbose
-        if self.region
-          self.tariffs[self.region].each { |ts| str << ts.to_s(verbose) }
+        if region
+          tariffs[region].each { |ts| str << ts.to_s(verbose) }
         else
-          self.tariffs.each do |_region, tslist|
+          tariffs.each do |_region, tslist|
             tslist.each { |ts| str << ts.to_s(verbose) }
           end
         end
       end
       str
     end
+
     private
+
     # Translate a payment method group returned from the Octopus API into an array of TariffSummary objects.
     # The payment method and tariff type are squashed into the TariffSummary objects.
     #
@@ -155,28 +162,27 @@ class OctAPI
       end
       tariff_list
     end
-
   end
 
-  TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat, :sur_incvat,
-                             :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat, :sc, :sur, :dur, :nur,
-                             keyword_init: true) do
+  TariffSummary = Struct.new(:tariff_code, :tariff_type, :payment_model, :sc_excvat, :sc_incvat, :sur_excvat,
+                             :sur_incvat, :dur_excvat, :dur_incvat, :nur_excvat, :nur_incvat, :sc, :sur, :dur, :nur,
+                             { keyword_init: true }) do
     def to_s(verbose = nil)
-      tt = OctAPI.tariff_type_name(self.tariff_type)
-      case self.tariff_type
+      tt = OctAPI.tariff_type_name(tariff_type)
+      case tariff_type
       when :sr_elec, :sr_gas
-        price = "Standard unit rate: #{self.sur_incvat} p/kWh"
+        price = "Standard unit rate: #{sur_incvat} p/kWh"
       when :dr_elec
-        price = "Day unit rate: #{self.dur_incvat} p/kWh, Night unit rate: #{self.nur_incvat} p/kWh"
+        price = "Day unit rate: #{dur_incvat} p/kWh, Night unit rate: #{nur_incvat} p/kWh"
       else
         raise ArgumentError, 'unknown tariff type'
       end
-      str = "  + #{self.tariff_code}: #{tt} #{self.payment_model}: Standing charge: #{self.sc_incvat} p/day, #{price}\n"
+      str = "  + #{tariff_code}: #{tt} #{payment_model}: Standing charge: #{sc_incvat} p/day, #{price}\n"
       if verbose
-        self.sc&.reverse_each  { |rate| str << stringify_tariff_charge(rate, 'Standing charge', 'p/day') }
-        self.sur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Standard unit rate') }
-        self.dur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Day unit rate') }
-        self.nur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Night unit rate') }
+        sc&.reverse_each  { |rate| str << stringify_tariff_charge(rate, 'Standing charge', 'p/day') }
+        sur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Standard unit rate') }
+        dur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Day unit rate') }
+        nur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Night unit rate') }
       end
       str
     end
@@ -184,7 +190,7 @@ class OctAPI
     private
 
     def stringify_tariff_charge(rate, rate_name, rate_unit = '')
-      "    #{rate['valid_from'].to_s} to #{rate['valid_to'].to_s}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}\n"
+      "    #{rate['valid_from']} to #{rate['valid_to']}: #{rate_name} #{rate['value_inc_vat']} #{rate_unit}\n"
     end
   end
 
@@ -198,7 +204,7 @@ class OctAPI
   def product(code, params = {})
     prodhash = octofetch("products/#{code}/", params)
     product = Product.new(code, prodhash, params.merge(region: @pes_name))
-    twit = 149
+    _twit = 149
     # If a period was specified using :period_from, and a region has been selected,
     # then retrieve and include a tariff charge "history" (which could extend into the future too).
     # It would be nice if this code were inside struct Product too, because it writes into the product, but it accesses
@@ -206,7 +212,7 @@ class OctAPI
     if params[:period_from] && product.region && !product.tariffs.empty? && product.tariffs[product.region]
       product.tariffs[product.region].each do |ts|
         ts.sc, rates, night_rates = tariff_charges(product.product_code, ts.tariff_code, ts.tariff_type,
-                                                 { period_from: params[:period_from], period_to: params[:period_to] })
+                                                   { period_from: params[:period_from], period_to: params[:period_to] })
         case ts.tariff_type
         when :sr_elec
           ts.sur = rates
@@ -216,14 +222,14 @@ class OctAPI
         when :sr_gas
           ts.sur = rates
         else
-          raise ArgumentError, "unknown tariff_type #{ts.tariff_type.to_s} for tariff #{ts.tariff_code}"
+          raise ArgumentError, "unknown tariff_type #{ts.tariff_type} for tariff #{ts.tariff_code}"
         end
       end
     end
     product
   end
 
-  def tariff_charges(prodcode, tariffcode, tarifftype, params={})
+  def tariff_charges(prodcode, tariffcode, tarifftype, params = {})
     night_rates = nil
     case tarifftype
     when :sr_elec
@@ -246,11 +252,11 @@ class OctAPI
 
   def octofetch(spec, params = {})
     begin
-      option_hash = {:accept => :json }
+      option_hash = { accept: :json }
       option_hash[:params] = params if params
       resp = @api[spec].get option_hash
     rescue => e
-      @logger.fatal("octopus-api: #{spec}: " + e.message) if @logger
+      @logger&.fatal("octopus-api: #{spec}: " + e.message)
       abort("octopus-api: #{spec}: " + e.message)
     end
     JSON.parse(resp)
@@ -259,12 +265,12 @@ class OctAPI
   def octofetch_array(spec, params = {})
     result = []
     myparams = params.dup
-    begin
+    loop do
       response = octofetch(spec, myparams)
       result += response['results']
       myparams[:page] = response['next'] && URI.decode_www_form(URI.parse(response['next']).query).to_h['page']
-    end while myparams[:page]
+      break unless myparams[:page]
+    end
     result
   end
-
 end
