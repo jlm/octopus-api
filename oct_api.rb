@@ -118,20 +118,14 @@ class OctAPI
     def to_s(verbose = nil)
       # noinspection RubyResolve
       str = String.new "Product #{product_code} \"#{display_name}\" tariffs active at #{tariffs_active_at}\n"
-      # puts "Matching tariffs:"
       # noinspection ConvertOneChainedExprToSafeNavigation
-      if tariffs && tariffs.empty?
-        str << "  + No applicable tariffs\n"
-        return
-      end
-      if verbose
-        if region
-          tariffs[region].each { |ts| str << ts.to_s(verbose) }
-        else
-          tariffs.each do |_region, tslist|
-            tslist.each { |ts| str << ts.to_s(verbose) }
-          end
-        end
+      return str << "  + No applicable tariffs\n" if tariffs && tariffs.empty?
+      return str unless verbose
+
+      if region
+        tariffs[region].each { |ts| str << ts.to_s(verbose) }
+      else
+        tariffs.each { |_region, tslist| tslist.each { |ts| str << ts.to_s(verbose) } }
       end
       str
     end
@@ -172,21 +166,18 @@ class OctAPI
                              { keyword_init: true }) do
     def to_s(verbose = nil)
       tt = OctAPI.tariff_type_name(tariff_type)
-      case tariff_type
-      when :sr_elec, :sr_gas
-        price = "Standard unit rate: #{sur_incvat} p/kWh"
-      when :dr_elec
-        price = "Day unit rate: #{dur_incvat} p/kWh, Night unit rate: #{nur_incvat} p/kWh"
-      else
-        raise ArgumentError, 'unknown tariff type'
-      end
-      str = "  + #{tariff_code}: #{tt} #{payment_model}: Standing charge: #{sc_incvat} p/day, #{price}\n"
-      if verbose
-        sc&.reverse_each  { |rate| str << stringify_tariff_charge(rate, 'Standing charge', 'p/day') }
-        sur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Standard unit rate') }
-        dur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Day unit rate') }
-        nur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Night unit rate') }
-      end
+      ttmsg = { sr_elec: "Standard unit rate: #{sur_incvat} p/kWh", sr_gas: "Standard unit rate: #{sur_incvat} p/kWh",
+                dr_elec: "Day unit rate: #{dur_incvat} p/kWh, Night unit rate: #{nur_incvat} p/kWh" }
+      price = ttmsg[tariff_type]
+      raise ArgumentError, 'unknown tariff type' unless price
+
+      str = String.new "  + #{tariff_code}: #{tt} #{payment_model}: Standing charge: #{sc_incvat} p/day, #{price}\n"
+      return str unless verbose
+
+      sc&.reverse_each  { |rate| str << stringify_tariff_charge(rate, 'Standing charge', 'p/day') }
+      sur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Standard unit rate') }
+      dur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Day unit rate') }
+      nur&.reverse_each { |rate| str << stringify_tariff_charge(rate, 'Night unit rate') }
       str
     end
 
