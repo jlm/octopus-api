@@ -162,29 +162,29 @@ def calc_charges(product, from_time, period_length, consumption)
   [total_sc, total_tc]
 end
 
-TariffComparison = Struct.new(:code, :sc, :tc, :total, :saving, :comparator?, :keyword_init => true) do
+TariffComparison = Struct.new(:code, :sc, :tc, :total, :saving, :comparator?, keyword_init: true) do
   def to_json(state = nil)
-    self.to_h.to_json(state)
+    to_h.to_json(state)
   end
 
   def to_s
-    sc_str = '%5.2f' % sc
-    tc_str = '%5.2f' % tc
-    total_str = '£%5.2f' % total
-    saving_str = '£%5.2f' % saving
-    code_str = '%28s' % (comparator? ? '*** ' + code : code)
+    sc_str = format('%5.2f', sc)
+    tc_str = format('%5.2f', tc)
+    total_str = format('£%5.2f', total)
+    saving_str = format('£%5.2f', saving)
+    code_str = format('%28s', (comparator? ? "*** #{code}" : code))
     "#{code_str}: Standing charges: #{sc_str}, tariff charges #{tc_str}; total #{total_str}, saving: #{saving_str}"
   end
 end
 
-Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, :keyword_init => true) do
+Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, keyword_init: true) do
   def winner
-    self.alternatives.last
+    alternatives.last
   end
 
   def to_json(state = nil)
-    result = self.to_h
-    result[:winner] = self.winner.to_h
+    result = to_h
+    result[:winner] = winner.to_h
     result.to_json(state)
   end
 
@@ -195,15 +195,15 @@ Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, 
     result << " Comparator: #{comparator.code} "
     if verbose
       result << "\n"
-      result << (alternatives.each { |a| a.to_s}).join("\n")
+      result << alternatives.each(&:to_s).join("\n")
       result << "\n"
     end
-    result << "Winner: #{self.winner.code}: Total: #{'£%5.2f' % self.winner.total}, Saving: #{'£%5.2f' % self.winner.saving}"
+    result << "Winner: #{winner.code}: Total: #{'£%5.2f' % winner.total}, Saving: #{'£%5.2f' % winner.saving}"
   end
 end
 
-def pence2pounds(p)
-  (p + 0.0) / 100.0
+def pence2pounds(pence)
+  (pence + 0.0) / 100.0
 end
 
 ###
@@ -226,22 +226,22 @@ begin
     o.string '--csv', 'write output to this file in CSV format'
     o.bool   '--products', 'retrieve product information from the Octopus API'
     o.string '-m', '--match', 'select products matching the given string in their display name'
-    o.string  '-b', '--brand', 'select products matching the given string in their brand'
+    o.string '-b', '--brand', 'select products matching the given string in their brand'
     o.string '--product', 'retrieve details of a single product'
     o.string '--compare', 'compare specified product with matching available products based on consumption'
     o.string '--period', 'comparison period, such as 2.weeks'
     o.bool '--export', 'include Export products'
     o.on '--help' do
-      STDERR.puts o
+      warn o
       exit
     end
   end
-  #noinspection RubyResolve
-  config = YAML.load(File.read(opts[:secrets]))
+
+  config = YAML.safe_load(File.read(opts[:secrets]))
 
   # Set up logging
   $_debug = opts.debug?
-  $logger = Logger.new(STDERR)
+  $logger = Logger.new($stderr)
   $logger.level = config['loggerlevel'] ? eval(config['loggerlevel']) : Logger::ERROR
   $logger.level = Logger::DEBUG if $_debug
   #
@@ -257,11 +257,9 @@ begin
   #
   # If we are posting to Slack, open the Slack webhook
   #
-=begin
-  if opts[:slackpost]
-    slack = RestClient::Resource.new(config['slack_webhook'])
-  end
-=end
+  #   if opts[:slackpost]
+  #     slack = RestClient::Resource.new(config['slack_webhook'])
+  #   end
 
   $missing_rate = 0
   if opts[:from]
@@ -293,10 +291,8 @@ begin
   #####     ELECTRICITY METER POINTS
   #####
   if opts[:emps]
-    emps = octo.emps(opts[:emps] + '/')
-    if emps
-      puts "mpan: #{emps['mpan']}: GSP: #{emps['gsp']}, profile class: #{emps['profile_class']}"
-    end
+    emps = octo.emps("#{opts[:emps]}/")
+    puts "mpan: #{emps['mpan']}: GSP: #{emps['gsp']}, profile class: #{emps['profile_class']}" if emps
   end
 
   #####
@@ -343,16 +339,14 @@ begin
       pd_params[:period_to] = to if to
       product = octo.product(prod['code'], pd_params)
 
-      if opts[:products]
-        puts product.to_s(opts['verbose'])
-      end
+      puts product.to_s(opts['verbose']) if opts[:products]
 
       if opts[:compare]
         abort('must specify --from <fromtime> with --compare') unless from_time    # for RuboCop
         abort('no consumption data available') unless consumption    # for RuboCop
         begin
           sc, tc = calc_charges(product, from_time, bucket_length, consumption)
-          comparison[prod['code']] = [sc, tc] unless sc == 0 && tc == 0
+          comparison[prod['code']] = [sc, tc] unless sc.zero? && tc.zero?
         rescue ArgumentError => e
           $logger.warn(e.message)
         end
@@ -361,18 +355,20 @@ begin
   end
 
   if opts[:compare]
-    sc, tc  = comparison[opts['compare']]
+    sc, tc = comparison[opts['compare']]
     comparator_total = pence2pounds(sc + tc)
-    ranked = comparison.sort{|a,b| (a[1][0]+a[1][1]) <=> (b[1][0]+b[1][1])}.reverse
+    ranked = comparison.sort { |a, b| (a[1][0] + a[1][1]) <=> (b[1][0] + b[1][1]) }.reverse
     comparison_record = Comparison.new(
-      :period_start => from_time,
-      :period_end => to_time ? to_time : from_time + bucket_length,
-      :comparator => TariffComparison.new(:code => opts[:compare], :sc => sc, :tc => tc, :total => comparator_total, :saving => 0, :comparator? => true),
-      :alternatives => Array.new(ranked.length) do |i|
+      period_start: from_time,
+      period_end: to_time || from_time + bucket_length,
+      comparator: TariffComparison.new(code: opts[:compare], sc: sc, tc: tc, total: comparator_total,
+                                       saving: 0, comparator?: true),
+      alternatives: Array.new(ranked.length) do |i|
         code = ranked[i][0]
         sc, tc = ranked[i][1]
         total = pence2pounds(sc + tc)
-        TariffComparison.new(:code => code, :sc => sc, :tc => tc, :total => total, :saving => comparator_total - total, :comparator? => code == opts[:compare])
+        TariffComparison.new(code: code, sc: sc, tc: tc, total: total, saving: comparator_total - total,
+                             comparator?: code == opts[:compare])
       end
     )
 
