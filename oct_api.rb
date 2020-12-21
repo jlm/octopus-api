@@ -91,12 +91,10 @@ class OctAPI
       # This will set all the initializers from the values fetched from the API (plus our local args).  That takes my
       # breath away.
       super(prodhash.merge(args.transform_keys(&:to_s)).slice(*PRODPARAMS.map(&:to_s)))
-      _twit = 42
       self.product_code = product_code
       self.tariffs_active_at = Time.parse(tariffs_active_at).getlocal(0)
       self.available_from = Time.parse(available_from).getlocal(0) if available_from
       self.available_to = Time.parse(available_to).getlocal(0) if available_to
-      _twit = 6 * 9
       # For each tariff type, for each region (designated by a PES name typically _A to _P derived from a postcode),
       # extract the list of tariff summaries returned in the "product" API call, and combine them into a hash indexed
       # by region. The tariff summaries are tagged with their tariff type, instead of being structured by it.
@@ -200,7 +198,6 @@ class OctAPI
     prodhash = octofetch("products/#{code}/", params)
     # noinspection RubyNilAnalysis
     product = Product.new(code, prodhash, params.merge(region: @pes_name))
-    _twit = 149
     # If a period was specified using :period_from, and a region has been selected,
     # then retrieve and include a tariff charge "history" (which could extend into the future too).
     # It would be nice if this code were inside struct Product too, because it writes into the product, but it accesses
