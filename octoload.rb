@@ -225,7 +225,8 @@ begin
     o.string '--at', 'select products available at a particular date'
     o.string '--csv', 'write output to this file in CSV format'
     o.bool   '--products', 'retrieve product information from the Octopus API'
-    o.string '-m', '--match', 'select products matching the given string in their display name'
+    o.string '-n', '--name', 'select products matching the given string in their display name'
+    o.string '-m', '--match', 'select products matching the given string in their product code'
     o.string '-b', '--brand', 'select products matching the given string in their brand'
     o.string '--product', 'retrieve details of a single product'
     o.string '--compare', 'compare specified product with matching available products based on consumption'
@@ -329,7 +330,8 @@ begin
   if opts[:products] || opts[:compare]
     params = at ? { available_at: at } : {}
     prods = octo.products(params)
-    prods.select! { |p| p['display_name'].match(Regexp.new(opts[:match])) } if opts[:match]
+    prods.select! { |p| p['display_name'].match(Regexp.new(opts[:name])) } if opts[:name]
+    prods.select! { |p| p['code'].match(Regexp.new(opts[:match])) } if opts[:match]
     prods.select! { |p| p['brand'].match(Regexp.new(brand)) } if brand
     prods.select! { |p| p['direction'] == (opts[:export] ? 'EXPORT' : 'IMPORT') }
     prods.each do |prod|
