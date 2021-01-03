@@ -176,7 +176,31 @@ TariffComparison = Struct.new(:code, :sc, :tc, :total, :saving, :comparator?, ke
   end
 end
 
-Comparison = Struct.new(:period_start, :period_end, :comparator, :alternatives, keyword_init: true) do
+# A record of the results of a tariff comparison
+# @param [Time] start_at when to start the comparison
+# @param [Time.ActiveState::Duration] end_at when to end the comparison
+# @param [Array] charges an ordered array of tariff charge pairs
+# @param [Hash] ci comparator info: the product code of the comparator product against which other tariffs will be ranked,
+#     the total standing and tariff charges of the comparator product for the period
+class Comparison
+  attr :alternatives, :period_start, :period_end, :comparator
+
+  def initialize(start_at, end_at, charges, ci)
+    @period_start = start_at
+    @period_end = end_at
+    comparator_total = pence2pounds(ci[:sc] + ci[:tc])
+    @comparator = TariffComparison.new(code: ci[:code], sc: ci[:sc], tc: ci[:tc], total: comparator_total,
+                                       saving: 0, comparator?: true)
+    @alternatives = []
+    charges.each do |chg|
+      code = chg[0]
+      sc, tc = chg[1]
+      total = pence2pounds(sc + tc)
+      @alternatives << TariffComparison.new(code: code, sc: sc, tc: tc, total: total, saving: comparator_total - total,
+                                            comparator?: code == ci[:code])
+    end
+  end
+
   def winner
     alternatives.last
   end
@@ -203,6 +227,14 @@ end
 
 def pence2pounds(pence)
   (pence + 0.0) / 100.0
+end
+
+def build_params(at, from, to)
+  pd_params = {}
+  pd_params[:tariffs_active_at] = at if at
+  pd_params[:period_from] = from if from
+  pd_params[:period_to] = to if to
+  pd_params
 end
 
 ###
@@ -312,18 +344,17 @@ begin
   #####
   #####     PRODUCTS
   #####
-  comparray = {}
+
+  # Hash of :product_code => [ :standing_charge, :tarrif_charge]
+  # @type [{String=>Array{Float,Float}}]
+  charges_by_product = {}
 
   if opts[:compare]
     abort('must specify --from <fromtime> with --compare') unless from_time
     abort('no consumption data available') unless consumption
-    pd_params = {}
-    pd_params[:tariffs_active_at] = at if at
-    pd_params[:period_from] = from if from
-    pd_params[:period_to] = to if to
-    comparator = octo.product(opts[:compare], pd_params)
+    comparator = octo.product(opts[:compare], build_params(at, from, to))
     puts "Comparator tariff: #{opts[:compare]}" unless opts[:json]
-    comparray[opts['compare']] = calc_charges(comparator, from_time, bucket_length, consumption)
+    charges_by_product[opts['compare']] = calc_charges(comparator, from_time, bucket_length, consumption)
   end
 
   if opts[:products] || opts[:compare]
@@ -334,12 +365,7 @@ begin
     prods.select! { |p| p['brand'].match(Regexp.new(brand)) } if brand
     prods.select! { |p| p['direction'] == (opts[:export] ? 'EXPORT' : 'IMPORT') }
     prods.each do |prod|
-      pd_params = {}
-      pd_params[:tariffs_active_at] = at if at
-      pd_params[:period_from] = from if from
-      pd_params[:period_to] = to if to
-      product = octo.product(prod['code'], pd_params)
-
+      product = octo.product(prod['code'], build_params(at, from, to))
       puts product.to_s(opts['verbose']) if opts[:products]
 
       if opts[:compare]
@@ -347,7 +373,7 @@ begin
         abort('no consumption data available') unless consumption    # for RuboCop
         begin
           sc, tc = calc_charges(product, from_time, bucket_length, consumption)
-          comparray[prod['code']] = [sc, tc] unless sc.zero? && tc.zero?
+          charges_by_product[prod['code']] = [sc, tc] unless sc.zero? && tc.zero?
         rescue ArgumentError => e
           $logger.warn(e.message)
         end
@@ -356,22 +382,10 @@ begin
   end
 
   if opts[:compare]
-    sc, tc = comparray[opts['compare']]
-    comparator_total = pence2pounds(sc + tc)
-    ranked = comparray.sort { |a, b| (a[1][0] + a[1][1]) <=> (b[1][0] + b[1][1]) }.reverse
-    comp = Comparison.new(
-      period_start: from_time,
-      period_end: to_time || from_time + bucket_length,
-      comparator: TariffComparison.new(code: opts[:compare], sc: sc, tc: tc, total: comparator_total,
-                                       saving: 0, comparator?: true),
-      alternatives: Array.new(ranked.length) do |i|
-        code = ranked[i][0]
-        sc, tc = ranked[i][1]
-        total = pence2pounds(sc + tc)
-        TariffComparison.new(code: code, sc: sc, tc: tc, total: total, saving: comparator_total - total,
-                             comparator?: code == opts[:compare])
-      end
-    )
+    comparator_sc, comparator_tc = charges_by_product[opts['compare']]
+    comparator_info = { :code => opts['compare'], :sc => comparator_sc, :tc => comparator_tc}
+    ranked = charges_by_product.sort { |a, b| (a[1][0] + a[1][1]) <=> (b[1][0] + b[1][1]) }.reverse
+    comp = Comparison.new(from_time, to_time || from_time + bucket_length, ranked, comparator_info)
 
     if opts[:json]
       puts comp.to_json
@@ -381,11 +395,7 @@ begin
   end
 
   if opts[:product]
-    pd_params = {}
-    pd_params[:tariffs_active_at] = at if at
-    pd_params[:period_from] = from if from
-    pd_params[:period_to] = to if to
-    p = octo.product(opts[:product], pd_params)
+    p = octo.product(opts[:product], build_params(at, from, to))
     puts p.to_s(opts['verbose'])
   end
 end
