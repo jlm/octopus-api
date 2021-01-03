@@ -59,6 +59,15 @@ class OctAPI
     octofetch("electricity-meter-points/#{mpan}")
   end
 
+  # Fetch the consumption records for a meter, for a specified time period
+  # @param [String] mpan the Meter Point Administration Number (MPAN, aka Supply Number or S-Number)
+  # @param [String] serial the serial number (string) of the meter
+  # @param [Hash, nil] opts parameters for the API call
+  # @option opts [Time] :period_from include tariff rate information from the time specified
+  # @option opts [Time] :period_to include tariff rate information up to the time specified (must also specify :period_from)
+  # @option opts [String] :order_by 'period' means earlier to later, '-period' the reverse
+  # @option opts [String] :group_by aggregate into periods of an 'hour', 'day', 'week', 'month' or 'quarter'
+  # @return [Array<Hash{String=>Float,String=>Date,String=>Date}>] array of +:consumption,:period_from,:period_to+ tuples
   def consumption(mpan, serial, opts = {})
     params = { page_size: (7 * 48).to_s, order_by: 'period' }
     params.merge!(opts)
