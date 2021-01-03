@@ -76,7 +76,6 @@ def output_consumption_as_csv(csv, results)
     48.times { |col| row << results[48 * rowno + col]['consumption'].to_f }
     csv << row
   end
-  csv.close
 end
 
 def report_bucket(bucket, bucket_no, iter, start, sc)
