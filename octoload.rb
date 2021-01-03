@@ -313,7 +313,7 @@ begin
   #####
   #####     PRODUCTS
   #####
-  comparison = {}
+  comparray = {}
 
   if opts[:compare]
     abort('must specify --from <fromtime> with --compare') unless from_time
@@ -324,7 +324,7 @@ begin
     pd_params[:period_to] = to if to
     comparator = octo.product(opts[:compare], pd_params)
     puts "Comparator tariff: #{opts[:compare]}" unless opts[:json]
-    comparison[opts['compare']] = calc_charges(comparator, from_time, bucket_length, consumption)
+    comparray[opts['compare']] = calc_charges(comparator, from_time, bucket_length, consumption)
   end
 
   if opts[:products] || opts[:compare]
@@ -348,7 +348,7 @@ begin
         abort('no consumption data available') unless consumption    # for RuboCop
         begin
           sc, tc = calc_charges(product, from_time, bucket_length, consumption)
-          comparison[prod['code']] = [sc, tc] unless sc.zero? && tc.zero?
+          comparray[prod['code']] = [sc, tc] unless sc.zero? && tc.zero?
         rescue ArgumentError => e
           $logger.warn(e.message)
         end
@@ -357,10 +357,10 @@ begin
   end
 
   if opts[:compare]
-    sc, tc = comparison[opts['compare']]
+    sc, tc = comparray[opts['compare']]
     comparator_total = pence2pounds(sc + tc)
-    ranked = comparison.sort { |a, b| (a[1][0] + a[1][1]) <=> (b[1][0] + b[1][1]) }.reverse
-    comparison_record = Comparison.new(
+    ranked = comparray.sort { |a, b| (a[1][0] + a[1][1]) <=> (b[1][0] + b[1][1]) }.reverse
+    comp = Comparison.new(
       period_start: from_time,
       period_end: to_time || from_time + bucket_length,
       comparator: TariffComparison.new(code: opts[:compare], sc: sc, tc: tc, total: comparator_total,
@@ -375,9 +375,9 @@ begin
     )
 
     if opts[:json]
-      puts comparison_record.to_json
+      puts comp.to_json
     else
-      puts comparison_record.to_s(opts['verbose'])
+      puts comp.to_s(opts['verbose'])
     end
   end
 
